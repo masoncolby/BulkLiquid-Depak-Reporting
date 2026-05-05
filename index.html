@@ -562,6 +562,143 @@ button,select,input{font-family:inherit;font-size:13px}
   flex-shrink:0;
 }
 
+/* Pair list inside banner */
+.pair-list{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-top:8px;
+}
+.pair-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  background:#fff;
+  border:1px solid #ead582;
+  border-radius:3px;
+  font-size:11.5px;
+}
+.pair-names{flex:1;color:#5a4a16}
+.pair-names code{
+  background:#fcf6e0;
+  padding:1px 6px;
+  border-radius:3px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+}
+.pair-vs{color:#a89441;margin:0 4px;font-weight:500}
+.pair-merge-btn{
+  background:var(--green-700);
+  color:#fff;
+  border:none;
+  padding:4px 11px;
+  border-radius:3px;
+  font-size:11px;
+  font-weight:500;
+  cursor:pointer;
+  font-family:inherit;
+}
+.pair-merge-btn:hover{background:var(--green-900)}
+.pair-form{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 12px;
+  background:#fff;
+  border:1px solid var(--green-500);
+  border-radius:3px;
+  flex-wrap:wrap;
+  font-size:11.5px;
+}
+.pair-form-label{font-weight:600;color:var(--ink-700);font-size:11px}
+.pair-form-radio{display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--ink-700)}
+.pair-form-radio input{margin:0;cursor:pointer}
+.pair-form-input{
+  padding:3px 8px;
+  font-size:11.5px;
+  border:1px solid var(--line-300);
+  border-radius:3px;
+  width:140px;
+  font-family:inherit;
+}
+.pair-form-input:focus{outline:none;border-color:var(--green-700)}
+.pair-form-confirm{
+  background:var(--green-700);
+  color:#fff;
+  border:none;
+  padding:4px 12px;
+  border-radius:3px;
+  font-size:11px;
+  font-weight:500;
+  cursor:pointer;
+  font-family:inherit;
+}
+.pair-form-confirm:hover{background:var(--green-900)}
+.pair-form-cancel{
+  background:transparent;
+  color:var(--ink-300);
+  border:none;
+  padding:4px 8px;
+  font-size:11px;
+  cursor:pointer;
+  font-family:inherit;
+}
+.pair-form-cancel:hover{color:var(--ink-700)}
+
+/* Active merges section in banner */
+.merges-active{
+  margin-top:10px;
+  padding-top:10px;
+  border-top:1px solid #ead582;
+}
+.merges-active-title{
+  font-size:10px;
+  font-weight:600;
+  color:#7d6310;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  margin-bottom:6px;
+}
+.merge-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  background:var(--green-100);
+  border:1px solid var(--green-500);
+  border-radius:3px;
+  padding:3px 4px 3px 8px;
+  font-size:11px;
+  color:var(--green-900);
+  margin:2px 4px 2px 0;
+  font-family:'JetBrains Mono',monospace;
+}
+.merge-chip strong{font-weight:600}
+.merge-chip-aliases{color:var(--ink-500);font-size:10px}
+.merge-chip-undo{
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  color:var(--green-700);
+  font-size:13px;
+  padding:0 2px;
+  line-height:1;
+  font-family:inherit;
+}
+.merge-chip-undo:hover{color:var(--neg)}
+
+/* Tag indicator on canonical names in dropdown/rankings */
+.alias-tag{
+  font-size:9.5px;
+  font-weight:500;
+  color:var(--green-700);
+  background:var(--green-100);
+  padding:1px 5px;
+  border-radius:8px;
+  margin-left:6px;
+  letter-spacing:0.02em;
+}
+
 .upload-info{
   margin-top:14px;
   padding:10px 12px;
@@ -1176,15 +1313,22 @@ function dedupKey(r, stream){
 
 function mergeStream(stream){
   var files = stream === 'bulk' ? STATE.bulkFiles : STATE.depakFiles;
+  var role = stream === 'bulk' ? 'vendor' : 'customer';
   var seen = {};
   var merged = [];
   var dupCount = 0;
   files.forEach(function(f){
     f.records.forEach(function(r){
-      var k = dedupKey(r, stream);
+      // Make a copy so we don't mutate the original raw file records (preserves undo)
+      var rcopy = Object.assign({}, r);
+      // Apply existing merge rules so the dedup key uses canonical names
+      if(STATE.merges && STATE.merges[role]){
+        rcopy[role] = canonicalFor(rcopy[role], role);
+      }
+      var k = dedupKey(rcopy, stream);
       if(seen[k]){ dupCount++; return; }
       seen[k] = true;
-      merged.push(r);
+      merged.push(rcopy);
     });
   });
   // Sort by date ascending so charts are ordered
@@ -1403,30 +1547,205 @@ function findSimilarNames(records, field){
 }
 
 function runNameWarning(){
-  if(STATE.warnDismissed) return;
   var banner = document.getElementById('warnBanner');
+  if(STATE.warnDismissed){
+    banner.innerHTML = '';
+    return;
+  }
+  var role = STATE.activeTab === 'bulk' ? 'vendor' : 'customer';
   var pairs = [];
   if(STATE.activeTab === 'bulk' && STATE.bulkData){
     pairs = findSimilarNames(STATE.bulkData, 'vendor');
   } else if(STATE.activeTab === 'depak' && STATE.depakData){
     pairs = findSimilarNames(STATE.depakData, 'customer');
   }
-  if(!pairs.length){
+  // Filter out pairs where both sides have already been merged into the same canonical name
+  pairs = pairs.filter(function(p){
+    var ca = canonicalFor(p.a, role), cb = canonicalFor(p.b, role);
+    return ca !== cb;
+  });
+
+  var activeMerges = STATE.merges[role] || [];
+
+  if(!pairs.length && !activeMerges.length){
     banner.innerHTML = '';
     return;
   }
-  var role = STATE.activeTab === 'bulk' ? 'vendor' : 'customer';
-  var pairHtml = pairs.map(function(p){
-    return '<code>' + p.a + '</code> vs <code>' + p.b + '</code>';
-  }).join(' &nbsp;&middot;&nbsp; ');
-  banner.innerHTML =
-    '<div class="warn-banner">' +
-      '<div class="warn-banner-body">' +
-        '<div class="warn-banner-title">Possible duplicate ' + role + ' names detected</div>' +
-        '<div class="warn-banner-text">These ' + role + ' names look similar enough that they may be the same entity reported under different naming conventions. Lifetime totals will treat them as separate. Consider cleaning your source files if they should be merged: ' + pairHtml + '</div>' +
-      '</div>' +
-      '<button class="warn-banner-close" onclick="dismissWarn()" title="Dismiss">&times;</button>' +
+
+  var html = '<div class="warn-banner">' +
+    '<div class="warn-banner-body">';
+
+  if(pairs.length){
+    html += '<div class="warn-banner-title">Possible duplicate ' + role + ' names detected</div>' +
+      '<div class="warn-banner-text">These ' + role + ' names look similar enough that they may be the same entity. Click <strong>Merge</strong> to combine them under a single canonical name across all data and reports.</div>' +
+      '<div class="pair-list">';
+    pairs.forEach(function(p, idx){
+      var pairId = 'pair-' + role + '-' + idx;
+      html += '<div class="pair-row" id="' + pairId + '">' +
+        '<div class="pair-names"><code>' + escapeHtml(p.a) + '</code> <span class="pair-vs">vs</span> <code>' + escapeHtml(p.b) + '</code></div>' +
+        '<button class="pair-merge-btn" onclick="openMergeForm(\'' + escapeAttr(p.a) + '\', \'' + escapeAttr(p.b) + '\', \'' + pairId + '\')">Merge \u2192</button>' +
+        '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Active merges section
+  if(activeMerges.length){
+    html += '<div class="merges-active">' +
+      '<div class="merges-active-title">Active merge rules (' + activeMerges.length + ')</div>';
+    activeMerges.forEach(function(rule, idx){
+      var aliasesPreview = rule.aliases.filter(function(a){return a !== rule.canonical}).join(', ');
+      html += '<span class="merge-chip"><strong>' + escapeHtml(rule.canonical) + '</strong>' +
+        '<span class="merge-chip-aliases">\u2190 ' + escapeHtml(aliasesPreview) + '</span>' +
+        '<button class="merge-chip-undo" onclick="undoMerge(\'' + role + '\', ' + idx + ')" title="Undo merge">&times;</button>' +
+        '</span>';
+    });
+    html += '</div>';
+  }
+
+  html += '</div>' +
+    '<button class="warn-banner-close" onclick="dismissWarn()" title="Dismiss banner">&times;</button>' +
+  '</div>';
+
+  banner.innerHTML = html;
+}
+
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function escapeAttr(s){
+  return (s||'').replace(/['"\\]/g, '\\$&').replace(/\n/g, '\\n');
+}
+
+// Open the inline merge confirmation form for a pair
+function openMergeForm(a, b, pairId){
+  var row = document.getElementById(pairId);
+  if(!row) return;
+  // Pick the longer / properly-cased name as default canonical
+  var defaultCanonical = (a.length >= b.length) ? a : b;
+  // Prefer mixed-case over all-lower
+  if(/[A-Z]/.test(b) && !/[A-Z]/.test(a)) defaultCanonical = b;
+  else if(/[A-Z]/.test(a) && !/[A-Z]/.test(b)) defaultCanonical = a;
+
+  var formId = pairId + '-form';
+  row.innerHTML = '<div class="pair-form" id="' + formId + '">' +
+    '<span class="pair-form-label">Keep as:</span>' +
+    '<label class="pair-form-radio"><input type="radio" name="' + formId + '-choice" value="a" ' + (defaultCanonical===a?'checked':'') + '> <code>' + escapeHtml(a) + '</code></label>' +
+    '<label class="pair-form-radio"><input type="radio" name="' + formId + '-choice" value="b" ' + (defaultCanonical===b?'checked':'') + '> <code>' + escapeHtml(b) + '</code></label>' +
+    '<label class="pair-form-radio"><input type="radio" name="' + formId + '-choice" value="custom"> custom:</label>' +
+    '<input type="text" class="pair-form-input" id="' + formId + '-custom" placeholder="Type a name">' +
+    '<button class="pair-form-confirm" onclick="confirmMerge(\'' + escapeAttr(a) + '\', \'' + escapeAttr(b) + '\', \'' + formId + '\')">Confirm</button>' +
+    '<button class="pair-form-cancel" onclick="cancelMerge()">Cancel</button>' +
     '</div>';
+  // Custom radio auto-selects when typing in the box
+  document.getElementById(formId + '-custom').addEventListener('input', function(){
+    var radios = document.getElementsByName(formId + '-choice');
+    for(var i=0; i<radios.length; i++) if(radios[i].value === 'custom') radios[i].checked = true;
+  });
+}
+
+function cancelMerge(){
+  runNameWarning();
+}
+
+function confirmMerge(a, b, formId){
+  var radios = document.getElementsByName(formId + '-choice');
+  var choice = 'a';
+  for(var i=0; i<radios.length; i++) if(radios[i].checked) choice = radios[i].value;
+  var canonical;
+  if(choice === 'custom'){
+    var customInput = document.getElementById(formId + '-custom');
+    canonical = (customInput.value || '').trim();
+    if(!canonical){
+      showToast('Please enter a name to keep, or pick one of the options', true);
+      return;
+    }
+  } else {
+    canonical = choice === 'a' ? a : b;
+  }
+  applyMerge(STATE.activeTab === 'bulk' ? 'vendor' : 'customer', [a, b], canonical);
+  runNameWarning();
+  // Re-render whatever section is active
+  if(typeof render === 'function') render();
+}
+
+// =============================================================
+// MERGE STATE & APPLICATION
+// =============================================================
+// STATE.merges = {vendor: [{aliases:['Cady','cady'], canonical:'Cady'}], customer: [...]}
+STATE.merges = {vendor: [], customer: []};
+
+// Map an original name through the merge rules to its current canonical
+function canonicalFor(name, role){
+  var rules = STATE.merges[role] || [];
+  for(var i=0; i<rules.length; i++){
+    if(rules[i].aliases.indexOf(name) >= 0) return rules[i].canonical;
+  }
+  return name;
+}
+
+function applyMerge(role, names, canonical){
+  // Resolve all input names to their current canonicals (in case some were already merged)
+  var allAliases = {};
+  names.forEach(function(n){
+    // If this name is already part of a rule, absorb that rule's aliases
+    var rules = STATE.merges[role];
+    var found = false;
+    for(var i=0; i<rules.length; i++){
+      if(rules[i].aliases.indexOf(n) >= 0 || rules[i].canonical === n){
+        rules[i].aliases.forEach(function(a){allAliases[a] = true});
+        allAliases[rules[i].canonical] = true;
+        // Remove the absorbed rule (we'll re-add a unified one)
+        rules.splice(i, 1);
+        found = true;
+        break;
+      }
+    }
+    if(!found) allAliases[n] = true;
+  });
+  allAliases[canonical] = true;
+
+  STATE.merges[role].push({
+    aliases: Object.keys(allAliases),
+    canonical: canonical
+  });
+
+  // Rewrite all in-memory records
+  rewriteRecords(role);
+  showToast('Merged ' + Object.keys(allAliases).length + ' names \u2192 ' + canonical);
+}
+
+function undoMerge(role, idx){
+  var rule = STATE.merges[role][idx];
+  if(!rule) return;
+  STATE.merges[role].splice(idx, 1);
+  // Restore: rebuild records from raw files
+  rebuildFromFiles();
+  // Reapply remaining rules
+  rewriteRecords(role);
+  rewriteRecords(role === 'vendor' ? 'customer' : 'vendor');
+  showToast('Undid merge: ' + rule.canonical);
+  runNameWarning();
+  if(typeof render === 'function') render();
+  if(typeof refreshTabState === 'function') refreshTabState();
+}
+
+// Rewrite records in STATE.bulkData / STATE.depakData based on current merge rules
+function rewriteRecords(role){
+  var data = role === 'vendor' ? STATE.bulkData : STATE.depakData;
+  var field = role;
+  if(!data) return;
+  data.forEach(function(r){
+    r[field] = canonicalFor(r[field], role);
+  });
+}
+
+// Rebuild raw merged data from the file list (used when undoing)
+function rebuildFromFiles(){
+  if(STATE.bulkFiles && STATE.bulkFiles.length) mergeStream('bulk');
+  if(STATE.depakFiles && STATE.depakFiles.length) mergeStream('depak');
 }
 
 function dismissWarn(){
@@ -1518,7 +1837,17 @@ function populateFilters(){
   customers.forEach(function(c){
     var opt = document.createElement('option');
     opt.value = c;
-    opt.textContent = c + (STATE.activeTab==='bulk' && c==='DePak' ? '  (Internal)' : '');
+    var label = c;
+    // Show merge indicator if this name is a canonical with absorbed aliases
+    var role = nameField;
+    var rules = (STATE.merges && STATE.merges[role]) || [];
+    var rule = rules.find(function(rr){return rr.canonical === c});
+    if(rule){
+      var aliasCount = rule.aliases.filter(function(a){return a !== c}).length;
+      if(aliasCount > 0) label += '  (+ ' + aliasCount + ' alias' + (aliasCount>1?'es':'') + ')';
+    }
+    if(STATE.activeTab==='bulk' && c==='DePak') label += '  (Internal)';
+    opt.textContent = label;
     custSel.appendChild(opt);
   });
 
