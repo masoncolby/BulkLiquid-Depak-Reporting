@@ -3159,150 +3159,100 @@ function _generatePDF(records){
   }
 
   // ===========================================================
-  // PAGE 1 — FULL COVER PAGE (Denali-style)
+  // PAGE 1 — COVER PAGE
+  // Stylistically similar to Denali (dominant top band, large whitespace,
+  // centered title block) but VIRESCO branding throughout. Title format:
+  // "VIRESCO: Bulk Liquid Sustainability Report" or "VIRESCO: DePak Sustainability Report"
   // ===========================================================
-  // Top brand band — solid green-900 covering ~22% of page
-  setFill(P.green900);
-  doc.rect(0, 0, pageW, 170, 'F');
 
-  // Yellow accent line at the bottom of the brand band
+  // ===== TOP BRAND BAND =====
+  // Dark green-900 band covering top ~16% of page
+  var bandH = 130;
+  setFill(P.green900);
+  doc.rect(0, 0, pageW, bandH, 'F');
+
+  // Thin yellow accent line at the bottom edge of the band
   setFill(P.yellow500);
-  doc.rect(0, 170, pageW, 3, 'F');
+  doc.rect(0, bandH, pageW, 2, 'F');
 
   // VIRESCO wordmark — large, white, top-left
   doc.setFont('helvetica','bold');
-  doc.setFontSize(32);
+  doc.setFontSize(38);
   setText(P.white);
-  doc.text('VIRESCO', margin, 70);
+  doc.text('VIRESCO', margin, 62);
 
-  // Subtitle under brand
+  // Subtitle on the band — facility identifier
   doc.setFont('helvetica','normal');
-  doc.setFontSize(11);
+  doc.setFontSize(12);
   setText(P.green200);
-  doc.text('Anaerobic Digestion  |  Turtle Lake, Wisconsin', margin, 90);
+  doc.text('Anaerobic Digestion  \u00B7  Turtle Lake, Wisconsin', margin, 84);
 
-  // Confidential marker on right side of brand band
-  doc.setFont('helvetica','normal');
+  // Confidentiality marker on the right side of band
+  doc.setFont('helvetica','bold');
   doc.setFontSize(8);
   setText(P.green200);
-  doc.text('CONFIDENTIAL', pageW - margin, 70, {align:'right'});
-  doc.text('For Authorized Recipients Only', pageW - margin, 82, {align:'right'});
-
-  // ===== Main content area (below brand band) =====
-  var coverY = 240;
-
-  // Stream eyebrow
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(11);
-  setText(P.green700);
-  doc.text(clean(streamName).toUpperCase(), margin, coverY);
-
-  // Yellow underscore for the eyebrow
-  setFill(P.yellow500);
-  doc.rect(margin, coverY + 4, 30, 2, 'F');
-
-  // Report title — huge
-  coverY += 36;
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(36);
-  setText(P.ink900);
-  var reportTypeTitle = clean(streamName) + ' Performance Report';
-  doc.text(reportTypeTitle, margin, coverY);
-
-  // Customer name — large secondary
-  coverY += 32;
+  doc.text('CONFIDENTIAL', pageW - margin, 62, {align:'right'});
   doc.setFont('helvetica','normal');
-  doc.setFontSize(22);
-  setText(P.green700);
-  doc.text(clean(customerName), margin, coverY);
+  doc.setFontSize(8);
+  doc.text('For Authorized Recipients Only', pageW - margin, 76, {align:'right'});
 
-  // Period range
-  coverY += 26;
+  // ===== CENTERED TITLE BLOCK (lower-middle of page, matches Denali's airy layout) =====
+  var titleY = pageH * 0.42;  // ~42% down the page
+
+  // Main report title — large, centered
+  // "VIRESCO: Bulk Liquid Sustainability Report" or "VIRESCO: DePak Sustainability Report"
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(24);
+  setText(P.ink900);
+  var titleText = 'VIRESCO: ' + clean(streamName) + ' Sustainability Report';
+  doc.text(titleText, pageW / 2, titleY, {align:'center'});
+
+  // Yellow accent rule centered below the title
+  titleY += 14;
+  var ruleW = 60;
+  setFill(P.yellow500);
+  doc.rect((pageW - ruleW) / 2, titleY, ruleW, 2.5, 'F');
+
+  // Customer / scope name — secondary, accent green
+  titleY += 30;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(18);
+  setText(P.green700);
+  doc.text(clean(customerName), pageW / 2, titleY, {align:'center'});
+
+  // Period range — centered
+  titleY += 26;
   doc.setFont('helvetica','normal');
   doc.setFontSize(13);
-  setText(P.ink500);
-  doc.text(clean(range.label), margin, coverY);
-
-  // Spacer
-  coverY += 80;
-
-  // ===== Hero stat block (bottom third) =====
-  // Three big numbers in a horizontal strip
-  setDraw(P.line300);
-  doc.setLineWidth(0.5);
-  doc.line(margin, coverY, pageW - margin, coverY);
-
-  coverY += 24;
-
-  var heroW = contentW / 3;
-  function heroStat(x, label, value, sub){
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(8);
-    setText(P.ink400);
-    doc.text(clean(label).toUpperCase(), x, coverY);
-
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(28);
-    setText(P.green900);
-    doc.text(clean(value), x, coverY + 28);
-
-    if(sub){
-      doc.setFont('helvetica','normal');
-      doc.setFontSize(8);
-      setText(P.ink400);
-      doc.text(clean(sub), x, coverY + 42);
-    }
-  }
-
-  if(tab === 'bulk'){
-    heroStat(margin, 'Total Volume', fmtCompact(summary.gallons), 'gallons processed');
-    heroStat(margin + heroW, 'GHG Avoided', fmt(summary.ghg, 0), 'tons CO2 equivalent');
-    heroStat(margin + 2*heroW, 'Renewable Energy', fmtCompact(summary.kwh), 'kWh generated');
-  } else {
-    heroStat(margin, 'Total Tonnage', fmt(summary.tons, 1), 'tons processed');
-    heroStat(margin + heroW, 'GHG Avoided', fmt(summary.ghg, 0), 'tons CO2 equivalent');
-    heroStat(margin + 2*heroW, 'Renewable Energy', fmtCompact(summary.kwh), 'kWh generated');
-  }
-
-  coverY += 64;
-  setDraw(P.line300);
-  doc.setLineWidth(0.5);
-  doc.line(margin, coverY, pageW - margin, coverY);
-
-  // ===== Cover footer =====
-  // Pinned to bottom of cover page
-  var footY = pageH - 80;
-
-  // Green accent block on left
-  setFill(P.green700);
-  doc.rect(margin, footY, 3, 40, 'F');
-
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(8);
   setText(P.ink700);
-  doc.text('PREPARED BY', margin + 12, footY + 10);
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(11);
-  setText(P.green900);
-  doc.text('VIRESCO AD LLC', margin + 12, footY + 25);
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(8);
-  setText(P.ink500);
-  doc.text('465 Western Blvd, Turtle Lake, WI', margin + 12, footY + 36);
+  doc.text(clean(range.label), pageW / 2, titleY, {align:'center'});
 
-  // Right side: generation date & report ID
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(8);
-  setText(P.ink700);
-  doc.text('GENERATED', pageW - margin, footY + 10, {align:'right'});
+  // Generated date — centered, smaller, muted
+  titleY += 30;
   doc.setFont('helvetica','normal');
-  doc.setFontSize(11);
-  setText(P.green900);
-  doc.text(new Date().toLocaleDateString('en-US',{month:'long', day:'numeric', year:'numeric'}), pageW - margin, footY + 25, {align:'right'});
+  doc.setFontSize(10);
+  setText(P.ink500);
+  doc.text('Generated: ' + new Date().toLocaleDateString('en-US',{month:'long', day:'numeric', year:'numeric'}), pageW / 2, titleY, {align:'center'});
+
+  // Prepared by VIRESCO — centered
+  titleY += 16;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  setText(P.ink500);
+  doc.text('Prepared by VIRESCO', pageW / 2, titleY, {align:'center'});
+
+  // ===== BOTTOM CONFIDENTIAL FOOTER =====
+  var confidentialY = pageH - 60;
+  doc.setFont('helvetica','italic');
+  doc.setFontSize(9);
+  setText(P.ink400);
+  doc.text('Confidential \u2014 For Authorized Recipients Only', pageW / 2, confidentialY, {align:'center'});
+
+  // Tiny report ID / address line below confidential, centered
   doc.setFont('helvetica','normal');
   doc.setFontSize(7);
-  setText(P.ink400);
-  doc.text('Report ID: ' + reportId, pageW - margin, footY + 36, {align:'right'});
+  setText(P.ink300);
+  doc.text(reportId + '  \u00B7  465 Western Blvd, Turtle Lake, WI', pageW / 2, confidentialY + 14, {align:'center'});
 
   // ===========================================================
   // PAGE 2 — EXECUTIVE SUMMARY
