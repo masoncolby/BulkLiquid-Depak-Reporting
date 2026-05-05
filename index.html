@@ -1309,20 +1309,16 @@ STATE.warnDismissed = false;
 
 // Dedup key: yyyy-mm-dd | vendor/customer (lowercased) | rounded volume
 function dedupKey(r, stream){
-  // Strategy: a record is a "duplicate" only if it's truly the same delivery.
-  // Primary key: date + vendor + ticket/BOL (handles cross-year ticket-number reuse correctly)
-  // Fallback: (source filename + source row number) when ticket missing — guaranteed
-  // unique within a file. Two physically distinct rows can never collide on this.
-  var dateKey = r.date.toISOString().split('T')[0];
-  var vendor = stream === 'bulk' ? (r.vendor||'').toLowerCase().trim() : (r.customer||'').toLowerCase().trim();
-  var ticket = stream === 'bulk' ? (r.ticket||'').toString().trim() : (r.bol||'').toString().trim();
-  if(ticket){
-    return (stream==='bulk'?'BL':'DP') + '|t|' + dateKey + '|' + vendor + '|' + ticket;
-  }
-  // No ticket → use file+row identity
+  // Strategy: a record is a "duplicate" only if it's the same row from the same uploaded file.
+  // We use (filename + source row number) as the unique key. This means:
+  //   - Uploading the same file twice → correctly deduped
+  //   - Different files with overlapping date ranges → kept independently
+  //   - Source data anomalies (ticket reuse, identical-looking rows) → never collapsed
+  // This is the safest dedup: it never silently drops legitimate records. The portal's job is
+  // to faithfully count what's in the source files, not to "fix" data quality issues upstream.
   var fileName = (r._srcFile || '').toLowerCase();
   var srcRow = r._srcRow || 0;
-  return (stream==='bulk'?'BL':'DP') + '|f|' + fileName + '|' + srcRow;
+  return (stream==='bulk'?'BL':'DP') + '|' + fileName + '|' + srcRow;
 }
 
 function mergeStream(stream){
