@@ -2,27 +2,35 @@
 
 Standalone HTML reporting tool for VIRESCO AD LLC's two intake streams: Bulk Liquid (gallons, carbon-content method) and DePak Organics (tons, mass-based). Generates branded customer-specific or plant-wide PDF reports from Excel intake logs — entirely client-side, no backend.
 
-## v2 — Enterprise Dashboard Rebuild (May 2026)
+## v3 — Multi-File Consolidated Reporting (May 2026)
 
-This release replaces v1's card-heavy layout with a PowerBI/Tableau-class dashboard:
+This release adds the ability to consolidate intake logs across multiple years into single lifetime reports.
 
-- **Inter typography** with tabular numerals throughout — numbers right-align cleanly across all tables
-- **Period-over-period deltas on every KPI** — automatically compares current period to prior comparable period (month vs prior month, quarter vs prior quarter, YTD vs same period last year)
-- **Sparklines on every KPI tile** showing trajectory within the selected period
-- **Tables instead of cards** for rankings and breakdowns — substantially more data per screen
-- **Inline progress bars** in table cells for percentage values
-- **Restrained palette** — full VIRESCO brand colors (green-700, green-500, yellow-500) but used with discipline; semantic green/red only for positive/negative deltas
-- **No emojis anywhere** — replaced with disciplined typography and SVG marks
-- **Tighter spacing rhythm** (4/8/16/24 px scale) and 1px borders instead of large rounded cards
-- **PDF rebuild** — 5-page report matching the new aesthetic with embedded sparklines, period deltas, and methodology callouts
+- **Multiple files per stream** — upload bulk-2024.xlsx, bulk-2025.xlsx, bulk-2026.xlsx (and so on); the portal merges them into one dataset
+- **Automatic deduplication** — records are deduped by date + vendor/customer + volume (case-insensitive), so accidentally uploading overlapping files won't double-count
+- **File list with remove buttons** — see what's loaded, remove a file with a single click, dataset updates immediately
+- **Lifetime period** — new period button that spans the earliest to latest record across all loaded files. Daily volume chart auto-buckets to monthly when range exceeds 1 year. No period-over-period delta on Lifetime view (nothing to compare to); KPIs show "all-time total" instead.
+- **Name similarity detection** — after upload, the portal scans vendor/customer names for likely duplicates ("Monster Energy" vs "Monster CS", "Pepsi-Cola" vs "Pepsi Cola") and shows a dismissible warning banner with the candidates. The portal won't auto-merge them — that's intentionally a manual decision — but you'll know to clean source files if needed.
+
+## v2 — Enterprise Dashboard Foundation (May 2026)
+
+- Inter typography with tabular numerals throughout
+- Period-over-period deltas on every KPI (month vs prior month, quarter vs prior quarter, YTD vs same period last year, annual vs prior year, custom vs equal-length window before)
+- Sparklines on every KPI tile showing trajectory within the selected period
+- Tables for rankings/breakdowns instead of cards (more data density)
+- Inline progress bars in table cells for percentage values
+- Restrained palette — full VIRESCO brand colors used with discipline; semantic green/red only for delta indicators
+- No emojis anywhere
+- 5-page PDF report matching the dashboard aesthetic
 
 ## Usage
 
 1. Open `index.html` (or visit the deployed Vercel URL)
-2. Upload the Bulk Liquid intake log (sheet `Intake Log`) and/or DePak intake log (sheet `Intake`)
-3. Select the stream tab, customer/vendor filter, and reporting period
-4. Browse five dashboard sections: Overview, Sustainability, Operations, Rankings, Intake Log
-5. Click **Export PDF** to generate a branded report with full GHG methodology and embedded charts
+2. For each stream, click "+ Add Bulk Liquid file" or "+ Add DePak file" — you can select multiple files at once. Repeat to add more.
+3. Click **Continue to Dashboard** when ready
+4. Select stream tab, customer/vendor filter, and reporting period (Month / Quarter / YTD / Annual / **Lifetime** / Custom)
+5. Browse five dashboard sections: Overview, Sustainability, Operations, Rankings, Intake Log
+6. Click **Export PDF** to generate a branded report
 
 ## File Structure
 
@@ -58,13 +66,21 @@ This release replaces v1's card-heavy layout with a PowerBI/Tableau-class dashbo
 
 **DePak** — `Date`, `Customer`, `Tons` (required); `Time`, `Product`, `Weight (lbs)`, `Quantity`, `Units`, `Truck #`, `Trucking Company`, `Customer BOL#` (optional)
 
+## Deduplication Rules
+
+When you upload multiple files for the same stream, records are merged with this dedup key:
+- **Bulk Liquid:** `YYYY-MM-DD | vendor (lowercased) | rounded gallons`
+- **DePak:** `YYYY-MM-DD | customer (lowercased) | tons (2 decimals)`
+
+If two records collide on this key, the second one is dropped silently. The merge summary line tells you how many duplicates were removed. Records that legitimately differ (different gallons, different vendor, etc.) are kept independently — no fuzzy matching, only exact-key matching.
+
 ## Deployment
 
 ```bash
 cd viresco-portal
 git init
 git add .
-git commit -m "v2 - enterprise dashboard rebuild"
+git commit -m "v3 - multi-file lifetime reporting"
 git branch -M main
 git remote add origin https://github.com/masoncolby/BulkLiquid-DePak-Reporting.git
 git push -u origin main

@@ -435,6 +435,133 @@ button,select,input{font-family:inherit;font-size:13px}
 .upload-btn-status{font-size:11px;font-weight:500;color:var(--ink-300)}
 .upload-btn-status.ok{color:var(--pos)}
 .upload-btn-block input[type=file]{display:none}
+
+/* File list (multiple files per stream) */
+.upload-section{margin-bottom:18px}
+.upload-section-hdr{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:8px;
+}
+.upload-section-title{
+  font-size:11px;
+  font-weight:600;
+  color:var(--ink-700);
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+}
+.upload-section-meta{
+  font-size:11px;
+  color:var(--ink-300);
+}
+.file-list{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  margin-bottom:6px;
+}
+.file-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:7px 12px;
+  background:var(--green-50);
+  border:1px solid var(--green-300);
+  border-radius:4px;
+  font-size:12px;
+}
+.file-row-info{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.file-row-name{
+  font-weight:500;
+  color:var(--ink-700);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.file-row-meta{font-size:10px;color:var(--ink-300)}
+.file-row-remove{
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  color:var(--ink-300);
+  font-size:14px;
+  padding:2px 6px;
+  border-radius:3px;
+  font-family:inherit;
+  line-height:1;
+  flex-shrink:0;
+  margin-left:8px;
+}
+.file-row-remove:hover{background:var(--neg);color:#fff}
+.add-file-btn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:8px 12px;
+  font-size:12px;
+  font-weight:500;
+  color:var(--green-700);
+  background:var(--bg-card);
+  border:1px dashed var(--green-500);
+  border-radius:4px;
+  cursor:pointer;
+  transition:all 0.12s;
+  width:100%;
+  font-family:inherit;
+}
+.add-file-btn:hover{background:var(--green-50);border-color:var(--green-700)}
+.add-file-btn .plus{font-size:14px;font-weight:500}
+
+/* Stream totals after files loaded */
+.stream-summary{
+  margin-top:6px;
+  padding:8px 12px;
+  background:var(--bg-muted);
+  border-radius:4px;
+  font-size:11px;
+  color:var(--ink-500);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.stream-summary strong{color:var(--ink-900);font-weight:600}
+
+/* Name similarity warning banner */
+.warn-banner{
+  background:#fcf6e0;
+  border:1px solid #e8d97a;
+  border-radius:4px;
+  padding:10px 14px;
+  margin:0 24px 14px;
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  font-size:12px;
+}
+.warn-banner-body{flex:1}
+.warn-banner-title{font-weight:600;color:#7d6310;margin-bottom:4px}
+.warn-banner-text{color:#5a4a16;line-height:1.5}
+.warn-banner-text code{
+  background:#fff;
+  padding:1px 6px;
+  border-radius:3px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  margin:0 2px;
+}
+.warn-banner-close{
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  color:#7d6310;
+  font-size:14px;
+  padding:0 4px;
+  line-height:1;
+  flex-shrink:0;
+}
+
 .upload-info{
   margin-top:14px;
   padding:10px 12px;
@@ -527,30 +654,36 @@ button,select,input{font-family:inherit;font-size:13px}
 <div class="upload-screen" id="uploadScreen">
   <div class="upload-card">
     <h2>Upload Intake Logs</h2>
-    <p>Upload one or both Excel intake logs to begin reporting.</p>
+    <p>Upload one or more Excel files per stream. Multiple files merge automatically with duplicate detection.</p>
 
-    <div class="upload-row">
-      <label class="upload-btn-block" id="bulkUploadBlock">
-        <div class="upload-btn-text">
-          <div class="upload-btn-title">Bulk Liquid Log</div>
-          <div class="upload-btn-sub">Reads sheet "Intake Log"</div>
-        </div>
-        <div class="upload-btn-status" id="bulkStatus">Click to upload</div>
-        <input type="file" id="bulkUpload" accept=".xlsx,.xls">
-      </label>
+    <div class="upload-section">
+      <div class="upload-section-hdr">
+        <span class="upload-section-title">Bulk Liquid</span>
+        <span class="upload-section-meta">Reads sheet "Intake Log"</span>
+      </div>
+      <div class="file-list" id="bulkFileList"></div>
+      <button class="add-file-btn" id="bulkAddBtn"><span class="plus">+</span> Add Bulk Liquid file</button>
+      <input type="file" id="bulkUpload" accept=".xlsx,.xls" multiple style="display:none">
+      <div class="stream-summary" id="bulkSummary" style="display:none"></div>
+    </div>
 
-      <label class="upload-btn-block" id="depakUploadBlock">
-        <div class="upload-btn-text">
-          <div class="upload-btn-title">DePak Organics Log</div>
-          <div class="upload-btn-sub">Reads sheet "Intake"</div>
-        </div>
-        <div class="upload-btn-status" id="depakStatus">Click to upload</div>
-        <input type="file" id="depakUpload" accept=".xlsx,.xls">
-      </label>
+    <div class="upload-section">
+      <div class="upload-section-hdr">
+        <span class="upload-section-title">DePak Organics</span>
+        <span class="upload-section-meta">Reads sheet "Intake"</span>
+      </div>
+      <div class="file-list" id="depakFileList"></div>
+      <button class="add-file-btn" id="depakAddBtn"><span class="plus">+</span> Add DePak file</button>
+      <input type="file" id="depakUpload" accept=".xlsx,.xls" multiple style="display:none">
+      <div class="stream-summary" id="depakSummary" style="display:none"></div>
     </div>
 
     <div class="upload-info">
-      Required columns — <strong>Bulk Liquid:</strong> <code>Date</code>, <code>Vendor</code>, <code>Gallons</code> · <strong>DePak:</strong> <code>Date</code>, <code>Customer</code>, <code>Tons</code>. Optional fields are detected automatically.
+      Required columns — <strong>Bulk Liquid:</strong> <code>Date</code>, <code>Vendor</code>, <code>Gallons</code> · <strong>DePak:</strong> <code>Date</code>, <code>Customer</code>, <code>Tons</code>. Optional fields are detected automatically. Mix files from different years freely — the portal merges them and deduplicates exact-match records.
+    </div>
+
+    <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-primary" id="enterPortalBtn" style="display:none">Continue to Dashboard &rarr;</button>
     </div>
   </div>
 </div>
@@ -569,6 +702,7 @@ button,select,input{font-family:inherit;font-size:13px}
       <button data-period="quarter">Quarter</button>
       <button data-period="ytd">YTD</button>
       <button data-period="annual">Annual</button>
+      <button data-period="lifetime">Lifetime</button>
       <button data-period="custom">Custom</button>
     </div>
   </div>
@@ -591,6 +725,9 @@ button,select,input{font-family:inherit;font-size:13px}
     <button class="btn btn-primary" id="generateBtn">Export PDF</button>
   </div>
 </div>
+
+<!-- NAME SIMILARITY WARNING -->
+<div id="warnBanner"></div>
 
 <!-- SECTION TABS -->
 <div class="section-tabs" id="sectionTabs" style="display:none">
@@ -1020,44 +1157,180 @@ function parseDePak(file, callback){
 }
 
 // =============================================================
-// UPLOAD HANDLERS
+// MULTI-FILE UPLOAD STATE & HANDLERS
 // =============================================================
-document.getElementById('bulkUpload').addEventListener('change', function(e){
-  var file = e.target.files[0];
-  if(!file) return;
-  document.getElementById('bulkStatus').textContent = 'Parsing…';
-  parseBulkLiquid(file, function(records, err){
-    if(err){
-      document.getElementById('bulkStatus').textContent = err;
-      document.getElementById('bulkStatus').style.color = 'var(--neg)';
-      return;
-    }
-    STATE.bulkData = records;
-    document.getElementById('bulkStatus').textContent = '\u2713 ' + fmt(records.length) + ' records';
-    document.getElementById('bulkStatus').className = 'upload-btn-status ok';
-    document.getElementById('bulkUploadBlock').classList.add('loaded');
-    showToast('Bulk Liquid loaded: ' + fmt(records.length) + ' records');
-    activatePortal();
+// STATE.bulkFiles, STATE.depakFiles are arrays of {name, records} objects
+STATE.bulkFiles = [];
+STATE.depakFiles = [];
+STATE.warnDismissed = false;
+
+// Dedup key: yyyy-mm-dd | vendor/customer (lowercased) | rounded volume
+function dedupKey(r, stream){
+  var dateKey = r.date.toISOString().split('T')[0];
+  if(stream === 'bulk'){
+    return dateKey + '|' + (r.vendor||'').toLowerCase().trim() + '|' + Math.round(r.gallons);
+  } else {
+    return dateKey + '|' + (r.customer||'').toLowerCase().trim() + '|' + Math.round(r.tons * 100) / 100;
+  }
+}
+
+function mergeStream(stream){
+  var files = stream === 'bulk' ? STATE.bulkFiles : STATE.depakFiles;
+  var seen = {};
+  var merged = [];
+  var dupCount = 0;
+  files.forEach(function(f){
+    f.records.forEach(function(r){
+      var k = dedupKey(r, stream);
+      if(seen[k]){ dupCount++; return; }
+      seen[k] = true;
+      merged.push(r);
+    });
   });
+  // Sort by date ascending so charts are ordered
+  merged.sort(function(a,b){return a.date - b.date});
+  if(stream === 'bulk') STATE.bulkData = merged;
+  else STATE.depakData = merged;
+  return {count: merged.length, dupCount: dupCount};
+}
+
+function renderFileList(stream){
+  var listEl = document.getElementById(stream + 'FileList');
+  var summaryEl = document.getElementById(stream + 'Summary');
+  var files = stream === 'bulk' ? STATE.bulkFiles : STATE.depakFiles;
+  listEl.innerHTML = '';
+  if(!files.length){
+    summaryEl.style.display = 'none';
+    return;
+  }
+  files.forEach(function(f, idx){
+    var row = document.createElement('div');
+    row.className = 'file-row';
+    var info = document.createElement('div');
+    info.className = 'file-row-info';
+    var name = document.createElement('div');
+    name.className = 'file-row-name';
+    name.textContent = f.name;
+    name.title = f.name;
+    var meta = document.createElement('div');
+    meta.className = 'file-row-meta';
+    var dateRange = '';
+    if(f.records.length){
+      var first = f.records.reduce(function(a,b){return a.date<b.date?a:b}).date;
+      var last = f.records.reduce(function(a,b){return a.date>b.date?a:b}).date;
+      dateRange = ' \u00B7 ' + first.toLocaleDateString('en-US',{month:'short',year:'numeric'}) +
+        (first.getFullYear()===last.getFullYear()&&first.getMonth()===last.getMonth() ? '' : ' \u2013 ' + last.toLocaleDateString('en-US',{month:'short',year:'numeric'}));
+    }
+    meta.textContent = fmt(f.records.length) + ' records' + dateRange;
+    info.appendChild(name);
+    info.appendChild(meta);
+    var btn = document.createElement('button');
+    btn.className = 'file-row-remove';
+    btn.innerHTML = '&times;';
+    btn.title = 'Remove this file';
+    btn.onclick = function(){
+      removeFile(stream, idx);
+    };
+    row.appendChild(info);
+    row.appendChild(btn);
+    listEl.appendChild(row);
+  });
+  // Update summary line
+  var merged = mergeStream(stream);
+  var totalRaw = files.reduce(function(s,f){return s + f.records.length}, 0);
+  var dupNote = merged.dupCount > 0 ? '  \u00B7  <strong>' + fmt(merged.dupCount) + '</strong> duplicates removed' : '';
+  summaryEl.innerHTML =
+    '<span><strong>' + fmt(merged.count) + '</strong> unique records across ' + fmt(files.length) + ' file' + (files.length===1?'':'s') + dupNote + '</span>' +
+    '<span>' + getStreamYearRange(stream) + '</span>';
+  summaryEl.style.display = 'flex';
+}
+
+function getStreamYearRange(stream){
+  var data = stream === 'bulk' ? STATE.bulkData : STATE.depakData;
+  if(!data || !data.length) return '';
+  var minD = data.reduce(function(a,b){return a.date<b.date?a:b}).date;
+  var maxD = data.reduce(function(a,b){return a.date>b.date?a:b}).date;
+  var minY = minD.getFullYear();
+  var maxY = maxD.getFullYear();
+  return minY === maxY ? (minY + '') : (minY + '\u2013' + maxY);
+}
+
+function removeFile(stream, idx){
+  if(stream === 'bulk'){
+    STATE.bulkFiles.splice(idx, 1);
+    if(!STATE.bulkFiles.length) STATE.bulkData = null;
+  } else {
+    STATE.depakFiles.splice(idx, 1);
+    if(!STATE.depakFiles.length) STATE.depakData = null;
+  }
+  renderFileList(stream);
+  updateContinueBtn();
+  // If the portal is already open, refresh state
+  if(document.getElementById('mainContent').style.display === 'block'){
+    if(STATE.activeTab === stream && !(stream==='bulk'?STATE.bulkData:STATE.depakData)){
+      // Active tab lost data, switch
+      STATE.activeTab = stream === 'bulk' ? 'depak' : 'bulk';
+    }
+    if(STATE.bulkData || STATE.depakData) refreshTabState();
+    runNameWarning();
+  }
+}
+
+function updateContinueBtn(){
+  var btn = document.getElementById('enterPortalBtn');
+  btn.style.display = (STATE.bulkData || STATE.depakData) ? 'inline-block' : 'none';
+}
+
+function handleFiles(stream, fileList){
+  var files = Array.from(fileList);
+  if(!files.length) return;
+  var pending = files.length;
+  var anyError = null;
+  files.forEach(function(file){
+    var parser = stream === 'bulk' ? parseBulkLiquid : parseDePak;
+    parser(file, function(records, err){
+      pending--;
+      if(err){
+        anyError = err;
+        showToast(file.name + ': ' + err, true);
+      } else {
+        var arr = stream === 'bulk' ? STATE.bulkFiles : STATE.depakFiles;
+        // Skip if same filename already loaded
+        if(arr.some(function(f){return f.name === file.name})){
+          showToast(file.name + ' already loaded \u2014 skipped', true);
+        } else {
+          arr.push({name: file.name, records: records});
+        }
+      }
+      if(pending === 0){
+        renderFileList(stream);
+        updateContinueBtn();
+        var totalCount = (stream==='bulk'?STATE.bulkData:STATE.depakData);
+        if(totalCount) showToast((stream==='bulk'?'Bulk Liquid':'DePak') + ' loaded: ' + fmt(totalCount.length) + ' records');
+      }
+    });
+  });
+}
+
+document.getElementById('bulkAddBtn').addEventListener('click', function(){
+  document.getElementById('bulkUpload').click();
+});
+document.getElementById('depakAddBtn').addEventListener('click', function(){
+  document.getElementById('depakUpload').click();
 });
 
+document.getElementById('bulkUpload').addEventListener('change', function(e){
+  handleFiles('bulk', e.target.files);
+  e.target.value = ''; // reset so re-uploading same file works
+});
 document.getElementById('depakUpload').addEventListener('change', function(e){
-  var file = e.target.files[0];
-  if(!file) return;
-  document.getElementById('depakStatus').textContent = 'Parsing…';
-  parseDePak(file, function(records, err){
-    if(err){
-      document.getElementById('depakStatus').textContent = err;
-      document.getElementById('depakStatus').style.color = 'var(--neg)';
-      return;
-    }
-    STATE.depakData = records;
-    document.getElementById('depakStatus').textContent = '\u2713 ' + fmt(records.length) + ' records';
-    document.getElementById('depakStatus').className = 'upload-btn-status ok';
-    document.getElementById('depakUploadBlock').classList.add('loaded');
-    showToast('DePak loaded: ' + fmt(records.length) + ' records');
-    activatePortal();
-  });
+  handleFiles('depak', e.target.files);
+  e.target.value = '';
+});
+
+document.getElementById('enterPortalBtn').addEventListener('click', function(){
+  STATE.warnDismissed = false;
+  activatePortal();
 });
 
 document.getElementById('replaceBtn').addEventListener('click', function(){
@@ -1066,9 +1339,100 @@ document.getElementById('replaceBtn').addEventListener('click', function(){
   document.getElementById('filterBar').style.display = 'none';
   document.getElementById('tabNav').style.display = 'none';
   document.getElementById('sectionTabs').style.display = 'none';
-  document.getElementById('bulkUpload').value = '';
-  document.getElementById('depakUpload').value = '';
+  document.getElementById('warnBanner').innerHTML = '';
 });
+
+// =============================================================
+// NAME SIMILARITY DETECTION
+// =============================================================
+// Levenshtein distance — for short strings only, simple O(mn) impl
+function levenshtein(a, b){
+  if(!a) return b ? b.length : 0;
+  if(!b) return a.length;
+  if(a === b) return 0;
+  var m = a.length, n = b.length;
+  var prev = new Array(n+1), curr = new Array(n+1);
+  for(var j=0; j<=n; j++) prev[j] = j;
+  for(var i=1; i<=m; i++){
+    curr[0] = i;
+    for(var j=1; j<=n; j++){
+      var cost = a.charCodeAt(i-1) === b.charCodeAt(j-1) ? 0 : 1;
+      curr[j] = Math.min(curr[j-1]+1, prev[j]+1, prev[j-1]+cost);
+    }
+    var tmp = prev; prev = curr; curr = tmp;
+  }
+  return prev[n];
+}
+
+function normalizeName(s){
+  return (s||'').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function findSimilarNames(records, field){
+  var names = Array.from(new Set(records.map(function(r){return r[field]})));
+  var pairs = [];
+  for(var i=0; i<names.length; i++){
+    for(var j=i+1; j<names.length; j++){
+      var a = names[i], b = names[j];
+      var an = normalizeName(a), bn = normalizeName(b);
+      // Identical after normalization (case/punctuation drift only) - flag with distance 0
+      if(an === bn){
+        pairs.push({a: a, b: b, distance: 0, ratio: 0, normalized: true});
+        continue;
+      }
+      // Quick filter: skip if length difference is too large
+      var lenDiff = Math.abs(an.length - bn.length);
+      var minLen = Math.min(an.length, bn.length);
+      if(minLen < 4) continue;
+      if(lenDiff > Math.max(3, Math.floor(minLen * 0.4))) continue;
+      var d = levenshtein(an, bn);
+      var ratio = d / Math.max(an.length, bn.length);
+      // Threshold: similar if edit distance <= 30% of longer string
+      if(ratio <= 0.3 && d > 0){
+        pairs.push({a: a, b: b, distance: d, ratio: ratio});
+      }
+      // Also catch: one name fully contains the other (e.g. "Monster" / "Monster CS")
+      else if(an.indexOf(bn) >= 0 || bn.indexOf(an) >= 0){
+        pairs.push({a: a, b: b, distance: d, ratio: ratio, contained: true});
+      }
+    }
+  }
+  // Sort by similarity (lower ratio = more similar)
+  pairs.sort(function(a,b){return a.ratio - b.ratio});
+  return pairs.slice(0, 10);
+}
+
+function runNameWarning(){
+  if(STATE.warnDismissed) return;
+  var banner = document.getElementById('warnBanner');
+  var pairs = [];
+  if(STATE.activeTab === 'bulk' && STATE.bulkData){
+    pairs = findSimilarNames(STATE.bulkData, 'vendor');
+  } else if(STATE.activeTab === 'depak' && STATE.depakData){
+    pairs = findSimilarNames(STATE.depakData, 'customer');
+  }
+  if(!pairs.length){
+    banner.innerHTML = '';
+    return;
+  }
+  var role = STATE.activeTab === 'bulk' ? 'vendor' : 'customer';
+  var pairHtml = pairs.map(function(p){
+    return '<code>' + p.a + '</code> vs <code>' + p.b + '</code>';
+  }).join(' &nbsp;&middot;&nbsp; ');
+  banner.innerHTML =
+    '<div class="warn-banner">' +
+      '<div class="warn-banner-body">' +
+        '<div class="warn-banner-title">Possible duplicate ' + role + ' names detected</div>' +
+        '<div class="warn-banner-text">These ' + role + ' names look similar enough that they may be the same entity reported under different naming conventions. Lifetime totals will treat them as separate. Consider cleaning your source files if they should be merged: ' + pairHtml + '</div>' +
+      '</div>' +
+      '<button class="warn-banner-close" onclick="dismissWarn()" title="Dismiss">&times;</button>' +
+    '</div>';
+}
+
+function dismissWarn(){
+  STATE.warnDismissed = true;
+  document.getElementById('warnBanner').innerHTML = '';
+}
 
 // =============================================================
 // PORTAL ACTIVATION
@@ -1250,6 +1614,7 @@ function refreshTabState(){
   });
   populateFilters();
   updateFilterUI();
+  runNameWarning();
   render();
 }
 
@@ -1311,6 +1676,24 @@ function getDateRange(){
       compact: fmtDateShort(s)+'\u2013'+fmtDateShort(e)
     };
   }
+  if(p==='lifetime'){
+    var data = currentData() || [];
+    if(!data.length){
+      var now0 = new Date();
+      return {start: now0, end: now0, label: 'Lifetime (no data)', shortLabel: 'Lifetime', compact: 'Lifetime'};
+    }
+    var minD = data.reduce(function(a,b){return a.date<b.date?a:b}).date;
+    var maxD = data.reduce(function(a,b){return a.date>b.date?a:b}).date;
+    var lStart = new Date(minD.getFullYear(), minD.getMonth(), minD.getDate(), 0,0,0);
+    var lEnd = new Date(maxD.getFullYear(), maxD.getMonth(), maxD.getDate(), 23,59,59);
+    return {
+      start: lStart,
+      end: lEnd,
+      label: 'Lifetime (' + fmtDate(lStart) + ' \u2014 ' + fmtDate(lEnd) + ')',
+      shortLabel: 'Lifetime',
+      compact: 'Lifetime ' + lStart.getFullYear() + (lStart.getFullYear()===lEnd.getFullYear()?'':'\u2013'+lEnd.getFullYear())
+    };
+  }
 }
 
 // Get the prior comparable period
@@ -1364,6 +1747,10 @@ function getPriorRange(){
       end: priorEnd,
       label: 'prior period'
     };
+  }
+  if(p==='lifetime'){
+    // No prior period for lifetime - nothing to compare to
+    return null;
   }
 }
 
@@ -1458,15 +1845,22 @@ function render(){
 
 // ----- KPI helper -----
 function buildKpi(label, value, unit, curr, prior, priorLabel, sparkData, color){
-  var delta = fmtDelta(curr, prior);
   var spark = sparkData ? renderSparkline(sparkData, color || VC.green700) : '';
+  // If priorLabel is null, this is a no-comparison view (lifetime) — show a single info line instead
+  var metaHtml;
+  if(!priorLabel){
+    metaHtml = '<div class="kpi-meta"><span class="kpi-vs">all-time total</span></div>';
+  } else {
+    var delta = fmtDelta(curr, prior);
+    metaHtml = '<div class="kpi-meta">' +
+      '<span class="'+delta.cls+'">'+delta.text+'</span>' +
+      '<span class="kpi-vs">vs '+priorLabel+'</span>' +
+    '</div>';
+  }
   return '<div class="kpi-card">' +
     '<div class="kpi-label">'+label+'</div>' +
     '<div><span class="kpi-value">'+value+'</span>' + (unit?'<span class="kpi-unit">'+unit+'</span>':'') + '</div>' +
-    '<div class="kpi-meta">' +
-      '<span class="'+delta.cls+'">'+delta.text+'</span>' +
-      '<span class="kpi-vs">vs '+priorLabel+'</span>' +
-    '</div>' +
+    metaHtml +
     spark +
     '</div>';
 }
@@ -1477,7 +1871,7 @@ function buildKpi(label, value, unit, curr, prior, priorLabel, sparkData, color)
 function renderOverview(records, s, prior, ps, range, priorRange){
   var tab = STATE.activeTab;
   var html = '';
-  var pl = priorRange ? priorRange.label : 'prior';
+  var pl = priorRange ? priorRange.label : null;
 
   if(tab==='bulk'){
     var sparkGal = generateSparkData(records, 'gallons', range);
@@ -1496,47 +1890,97 @@ function renderOverview(records, s, prior, ps, range, priorRange){
   }
   document.getElementById('overviewKpis').innerHTML = html;
 
-  // Daily volume chart
-  document.getElementById('dailyChartTitle').textContent = (tab==='bulk' ? 'Daily Volume' : 'Daily Tons') + ' \u2014 ' + (STATE.filters.customer==='ALL'?'Plant-Wide':STATE.filters.customer);
-  document.getElementById('dailyChartMeta').textContent = range.label;
-  document.getElementById('dailyChartSub').textContent = (tab==='bulk' ? 'Gallons received per day' : 'Tons processed per day');
+  // Daily volume chart - adaptive bucketing based on range length
+  var rangeDays = Math.ceil((range.end - range.start) / 86400000);
+  var bucketMode;
+  if(rangeDays > 365) bucketMode = 'month';
+  else if(rangeDays > 92) bucketMode = 'week';
+  else bucketMode = 'day';
 
-  var byDay = {};
-  records.forEach(function(r){
-    var k = r.date.toISOString().split('T')[0];
-    if(!byDay[k]) byDay[k] = 0;
-    byDay[k] += tab==='bulk' ? r.gallons : r.tons;
-  });
-  // Fill in zero days
+  var chartTitlePrefix;
+  if(bucketMode === 'month') chartTitlePrefix = tab==='bulk' ? 'Monthly Volume' : 'Monthly Tons';
+  else if(bucketMode === 'week') chartTitlePrefix = tab==='bulk' ? 'Weekly Volume' : 'Weekly Tons';
+  else chartTitlePrefix = tab==='bulk' ? 'Daily Volume' : 'Daily Tons';
+
+  document.getElementById('dailyChartTitle').textContent = chartTitlePrefix + ' \u2014 ' + (STATE.filters.customer==='ALL'?'Plant-Wide':STATE.filters.customer);
+  document.getElementById('dailyChartMeta').textContent = range.label;
+  var subTextMap = {day: 'Gallons received per day', week: 'Gallons received per week', month: 'Gallons received per month'};
+  var subTextMapT = {day: 'Tons processed per day', week: 'Tons processed per week', month: 'Tons processed per month'};
+  document.getElementById('dailyChartSub').textContent = (tab==='bulk' ? subTextMap : subTextMapT)[bucketMode];
+
   var allDays = [];
-  var d = new Date(range.start.getFullYear(), range.start.getMonth(), range.start.getDate());
-  var endD = new Date(range.end.getFullYear(), range.end.getMonth(), range.end.getDate());
-  while(d <= endD){
-    var k = d.toISOString().split('T')[0];
-    allDays.push({key:k, val:byDay[k]||0});
-    d.setDate(d.getDate()+1);
-    if(allDays.length > 400) break;
+  if(bucketMode === 'day'){
+    var byDay = {};
+    records.forEach(function(r){
+      var k = r.date.toISOString().split('T')[0];
+      byDay[k] = (byDay[k]||0) + (tab==='bulk' ? r.gallons : r.tons);
+    });
+    var d = new Date(range.start.getFullYear(), range.start.getMonth(), range.start.getDate());
+    var endD = new Date(range.end.getFullYear(), range.end.getMonth(), range.end.getDate());
+    while(d <= endD){
+      var k = d.toISOString().split('T')[0];
+      allDays.push({key:k, label: d.toLocaleDateString('en-US',{month:'short',day:'numeric'}), val: byDay[k]||0});
+      d.setDate(d.getDate()+1);
+      if(allDays.length > 400) break;
+    }
+  } else if(bucketMode === 'week'){
+    var byWk = {};
+    records.forEach(function(r){
+      var dd = new Date(r.date);
+      dd.setDate(dd.getDate() - dd.getDay()); // start of week (Sunday)
+      var k = dd.toISOString().split('T')[0];
+      byWk[k] = (byWk[k]||0) + (tab==='bulk' ? r.gallons : r.tons);
+    });
+    var d = new Date(range.start.getFullYear(), range.start.getMonth(), range.start.getDate());
+    d.setDate(d.getDate() - d.getDay());
+    var endD = new Date(range.end.getFullYear(), range.end.getMonth(), range.end.getDate());
+    while(d <= endD){
+      var k = d.toISOString().split('T')[0];
+      allDays.push({key:k, label: d.toLocaleDateString('en-US',{month:'short',day:'numeric'}), val: byWk[k]||0});
+      d.setDate(d.getDate()+7);
+      if(allDays.length > 200) break;
+    }
+  } else {
+    // monthly
+    var byMo = {};
+    records.forEach(function(r){
+      var k = r.date.getFullYear() + '-' + String(r.date.getMonth()+1).padStart(2,'0');
+      byMo[k] = (byMo[k]||0) + (tab==='bulk' ? r.gallons : r.tons);
+    });
+    var d = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
+    var endD = new Date(range.end.getFullYear(), range.end.getMonth(), 1);
+    while(d <= endD){
+      var k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+      var lbl = (range.end.getFullYear() === range.start.getFullYear())
+        ? monthShort(d.getMonth())
+        : monthShort(d.getMonth()) + ' ' + (d.getFullYear()+'').slice(2);
+      allDays.push({key:k, label: lbl, val: byMo[k]||0});
+      d.setMonth(d.getMonth()+1);
+      if(allDays.length > 60) break;
+    }
   }
 
   destroyChart('chartDaily');
   if(allDays.length){
     STATE.charts.chartDaily = new Chart(document.getElementById('chartDaily'),{
-      type:'line',
+      type: bucketMode === 'month' ? 'bar' : 'line',
       data:{
-        labels: allDays.map(function(x){return new Date(x.key+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}),
+        labels: allDays.map(function(x){return x.label}),
         datasets:[{
           label: tab==='bulk' ? 'Gallons' : 'Tons',
           data: allDays.map(function(x){return x.val}),
           borderColor: VC.green700,
-          backgroundColor: 'rgba(113,204,152,0.18)',
-          fill:true,
-          tension:0.3,
-          pointRadius:0,
-          pointHoverRadius:4,
-          borderWidth:1.8
+          backgroundColor: bucketMode === 'month' ? VC.green500 : 'rgba(113,204,152,0.18)',
+          fill: bucketMode !== 'month',
+          tension: 0.3,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          borderWidth: 1.8,
+          borderRadius: bucketMode === 'month' ? 2 : 0,
+          maxBarThickness: 32
         }]
       },
-      options: chartOptsLine()
+      options: bucketMode === 'month' ? chartOptsBar() : chartOptsLine()
     });
   }
 
@@ -1675,7 +2119,7 @@ function renderOverview(records, s, prior, ps, range, priorRange){
 // =============================================================
 function renderSustainability(records, s, prior, ps, range, priorRange){
   var tab = STATE.activeTab;
-  var pl = priorRange ? priorRange.label : 'prior';
+  var pl = priorRange ? priorRange.label : null;
   var sparkVal = generateSparkData(records, tab==='bulk'?'gallons':'tons', range);
 
   var html = '';
@@ -1774,7 +2218,7 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
 // =============================================================
 function renderOps(records, s, prior, ps, range, priorRange){
   var tab = STATE.activeTab;
-  var pl = priorRange ? priorRange.label : 'prior';
+  var pl = priorRange ? priorRange.label : null;
   var uniqueDays = new Set(records.map(function(r){return r.date.toISOString().split('T')[0]})).size;
   var priorUniqueDays = new Set(prior.map(function(r){return r.date.toISOString().split('T')[0]})).size;
   var totalDays = Math.ceil((range.end - range.start) / 86400000);
@@ -1950,21 +2394,32 @@ function renderRankings(range){
   var totalVal = sorted.reduce(function(s,e){return s+e[1].value}, 0);
 
   var unitLabel = tab==='bulk' ? 'Gallons' : 'Tons';
-  var html = '<thead><tr><th style="width:30px">#</th><th>'+(tab==='bulk'?'Vendor':'Customer')+'</th><th class="num-th">'+unitLabel+'</th><th class="num-th">% of total</th><th class="num-th">Loads</th><th class="num-th">vs '+(prior?prior.label:'prior')+'</th></tr></thead><tbody>';
+  var hasPrior = !!prior;
+  var html = '<thead><tr><th style="width:30px">#</th><th>'+(tab==='bulk'?'Vendor':'Customer')+'</th><th class="num-th">'+unitLabel+'</th><th class="num-th">% of total</th><th class="num-th">Loads</th>' +
+    (hasPrior ? '<th class="num-th">vs '+prior.label+'</th>' : '') +
+    '</tr></thead><tbody>';
   sorted.forEach(function(entry, idx){
     var name = entry[0], val = entry[1].value, loads = entry[1].loads;
     var pct = (val/totalVal)*100;
     var priorVal = byPriorCust[name] || 0;
-    var delta = fmtDelta(val, priorVal);
     var fillCls = idx===0 ? 'bar-fill' : idx<3 ? 'bar-fill bar-fill-mid' : 'bar-fill bar-fill-light';
     var nameHtml = name + (name==='DePak'&&tab==='bulk' ? ' <span style="color:var(--ink-200);font-size:10px">internal</span>' : '');
-    html += '<tr><td style="color:var(--ink-300)">'+(idx+1)+'</td><td>'+nameHtml+'</td><td class="num">'+(tab==='bulk'?fmt(val,0):fmt(val,2))+'</td><td class="num"><span class="bar-cell"><span class="bar-track"><span class="'+fillCls+'" style="width:'+Math.max(2,pct*1.5).toFixed(0)+'%"></span></span>'+fmt(pct,1)+'%</span></td><td class="num">'+loads+'</td><td class="num '+delta.cls+'">'+delta.text+'</td></tr>';
+    var deltaCell = '';
+    if(hasPrior){
+      var delta = fmtDelta(val, priorVal);
+      deltaCell = '<td class="num '+delta.cls+'">'+delta.text+'</td>';
+    }
+    html += '<tr><td style="color:var(--ink-300)">'+(idx+1)+'</td><td>'+nameHtml+'</td><td class="num">'+(tab==='bulk'?fmt(val,0):fmt(val,2))+'</td><td class="num"><span class="bar-cell"><span class="bar-track"><span class="'+fillCls+'" style="width:'+Math.max(2,pct*1.5).toFixed(0)+'%"></span></span>'+fmt(pct,1)+'%</span></td><td class="num">'+loads+'</td>'+deltaCell+'</tr>';
   });
-  if(!sorted.length) html += '<tr><td colspan="6" class="empty">No data in selected period</td></tr>';
+  if(!sorted.length) html += '<tr><td colspan="'+(hasPrior?6:5)+'" class="empty">No data in selected period</td></tr>';
   // Total row
-  var priorTotal = Object.values(byPriorCust).reduce(function(s,v){return s+v}, 0);
-  var totalDelta = fmtDelta(totalVal, priorTotal);
-  html += '<tr class="dt-tot"><td></td><td>Total</td><td class="num">'+(tab==='bulk'?fmt(totalVal,0):fmt(totalVal,2))+'</td><td class="num">100%</td><td class="num">'+inRange.length+'</td><td class="num '+totalDelta.cls+'">'+totalDelta.text+'</td></tr>';
+  var totDeltaCell = '';
+  if(hasPrior){
+    var priorTotal = Object.values(byPriorCust).reduce(function(s,v){return s+v}, 0);
+    var totalDelta = fmtDelta(totalVal, priorTotal);
+    totDeltaCell = '<td class="num '+totalDelta.cls+'">'+totalDelta.text+'</td>';
+  }
+  html += '<tr class="dt-tot"><td></td><td>Total</td><td class="num">'+(tab==='bulk'?fmt(totalVal,0):fmt(totalVal,2))+'</td><td class="num">100%</td><td class="num">'+inRange.length+'</td>'+totDeltaCell+'</tr>';
   html += '</tbody>';
   document.getElementById('rankTable').innerHTML = html;
 }
@@ -2256,17 +2711,24 @@ function _generatePDF(records){
       doc.text(unit, valX + valW + 2, y+28);
     }
 
-    // Delta
-    var delta = fmtDelta(curr, priorVal);
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(7);
-    var deltaColor = delta.dir==='pos' ? P.pos : delta.dir==='neg' ? P.neg : P.ink300;
-    setText(deltaColor);
-    doc.text(delta.text, x+8, y+39);
-    doc.setFont('helvetica','normal');
-    setText(P.ink300);
-    var dw = doc.getTextWidth(delta.text);
-    doc.text('vs ' + priorLabel, x+8+dw+5, y+39);
+    // Delta (or "all-time total" label if no prior period)
+    if(priorLabel){
+      var delta = fmtDelta(curr, priorVal);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(7);
+      var deltaColor = delta.dir==='pos' ? P.pos : delta.dir==='neg' ? P.neg : P.ink300;
+      setText(deltaColor);
+      doc.text(delta.text, x+8, y+39);
+      doc.setFont('helvetica','normal');
+      setText(P.ink300);
+      var dw = doc.getTextWidth(delta.text);
+      doc.text('vs ' + priorLabel, x+8+dw+5, y+39);
+    } else {
+      doc.setFont('helvetica','italic');
+      doc.setFontSize(7);
+      setText(P.ink300);
+      doc.text('all-time total', x+8, y+39);
+    }
 
     // Sparkline
     if(sparkData && sparkData.length){
@@ -2358,7 +2820,7 @@ function _generatePDF(records){
   // KPI strip — 5 across
   var kpiW = (pageW - 2*margin - 4) / 5;
   var kpiH = 64;
-  var pl = priorRange ? priorRange.label : 'prior';
+  var pl = priorRange ? priorRange.label : null;
 
   // Build KPI data and sparklines
   var sparkVal = generateSparkData(records, tab==='bulk'?'gallons':'tons', range);
@@ -2701,51 +3163,62 @@ function _generatePDF(records){
     var totalVal = sorted.reduce(function(s,e){return s+e[1].value}, 0);
     var totalLoads = sorted.reduce(function(s,e){return s+e[1].loads}, 0);
 
+    var hasPriorP = !!priorRange;
     var rankBody = sorted.map(function(entry, idx){
       var name = entry[0], val = entry[1].value, loads = entry[1].loads;
       var pct = (val/totalVal)*100;
       var priorVal = byPriorCust[name] || 0;
-      var delta = fmtDelta(val, priorVal);
-      return [
+      var row = [
         (idx+1)+'',
         name + (name==='DePak'&&tab==='bulk'?'  (internal)':''),
         tab==='bulk' ? fmt(val,0) : fmt(val,2),
         fmt(pct, 1) + '%',
-        loads+'',
-        delta.text
+        loads+''
       ];
+      if(hasPriorP){
+        var delta = fmtDelta(val, priorVal);
+        row.push(delta.text);
+      }
+      return row;
     });
     // Total row
-    var priorTotal = Object.values(byPriorCust).reduce(function(s,v){return s+v}, 0);
-    var totalDeltaP = fmtDelta(totalVal, priorTotal);
-    rankBody.push([
+    var totalRow = [
       {content:'', styles:{fillColor: P.green50}},
       {content:'Total', styles:{fillColor: P.green50, fontStyle:'bold', textColor: P.green900}},
       {content: tab==='bulk' ? fmt(totalVal,0) : fmt(totalVal,2), styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: P.green900}},
       {content:'100%', styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: P.green900}},
-      {content: totalLoads+'', styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: P.green900}},
-      {content: totalDeltaP.text, styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: totalDeltaP.dir==='pos'?P.pos:totalDeltaP.dir==='neg'?P.neg:P.ink300}}
-    ]);
+      {content: totalLoads+'', styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: P.green900}}
+    ];
+    if(hasPriorP){
+      var priorTotal = Object.values(byPriorCust).reduce(function(s,v){return s+v}, 0);
+      var totalDeltaP = fmtDelta(totalVal, priorTotal);
+      totalRow.push({content: totalDeltaP.text, styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: totalDeltaP.dir==='pos'?P.pos:totalDeltaP.dir==='neg'?P.neg:P.ink300}});
+    }
+    rankBody.push(totalRow);
 
     var unitLabel = tab==='bulk' ? 'Gallons' : 'Tons';
+    var headRow = ['#', (tab==='bulk'?'Vendor':'Customer'), unitLabel, '% of Total', 'Loads'];
+    if(hasPriorP) headRow.push('vs ' + priorRange.label);
+    var colStyles = {
+      0: {cellWidth:24, textColor: P.ink300, halign:'center'},
+      1: {cellWidth:160},
+      2: {halign:'right', fontStyle:'bold'},
+      3: {halign:'right', textColor: P.ink500},
+      4: {halign:'right', cellWidth:50}
+    };
+    if(hasPriorP) colStyles[5] = {halign:'right', cellWidth:80, fontStyle:'bold'};
+
     doc.autoTable({
       startY: y,
-      head: [['#', (tab==='bulk'?'Vendor':'Customer'), unitLabel, '% of Total', 'Loads', 'vs ' + (priorRange?priorRange.label:'prior')]],
+      head: [headRow],
       body: rankBody,
       margin: {left: margin, right: margin},
       theme: 'plain',
       headStyles: {fillColor: P.green700, textColor: [255,255,255], fontStyle:'bold', fontSize:8, cellPadding:6},
       bodyStyles: {fontSize:9, cellPadding:6, lineColor: P.line300, lineWidth:0.3},
-      columnStyles: {
-        0: {cellWidth:24, textColor: P.ink300, halign:'center'},
-        1: {cellWidth:160},
-        2: {halign:'right', fontStyle:'bold'},
-        3: {halign:'right', textColor: P.ink500},
-        4: {halign:'right', cellWidth:50},
-        5: {halign:'right', cellWidth:80, fontStyle:'bold'}
-      },
+      columnStyles: colStyles,
       didParseCell: function(data){
-        if(data.section==='body' && data.column.index===5 && data.row.index < rankBody.length-1){
+        if(data.section==='body' && hasPriorP && data.column.index===5 && data.row.index < rankBody.length-1){
           var txt = data.cell.text[0]||'';
           if(txt.indexOf('\u25B2')>=0) data.cell.styles.textColor = P.pos;
           else if(txt.indexOf('\u25BC')>=0) data.cell.styles.textColor = P.neg;
