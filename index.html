@@ -1303,11 +1303,33 @@ STATE.warnDismissed = false;
 
 // Dedup key: yyyy-mm-dd | vendor/customer (lowercased) | rounded volume
 function dedupKey(r, stream){
+  // Strategy: prefer ticket/BOL as primary unique key. If absent, build a key
+  // specific enough that legitimate same-day same-vendor loads aren't collapsed.
+  // It is far better to keep a real duplicate (cosmetic) than to silently drop
+  // a real load (data loss).
   var dateKey = r.date.toISOString().split('T')[0];
   if(stream === 'bulk'){
-    return dateKey + '|' + (r.vendor||'').toLowerCase().trim() + '|' + Math.round(r.gallons);
+    var ticket = (r.ticket||'').toString().trim();
+    var vendor = (r.vendor||'').toLowerCase().trim();
+    if(ticket){
+      // Ticket numbers are unique per delivery
+      return 'BL|t|' + vendor + '|' + ticket;
+    }
+    // No ticket: use date + exact time + driver + exact gallons (no rounding)
+    var time = (r.time||'').toString().trim();
+    var driver = (r.driver||'').toString().trim().toLowerCase();
+    var tank = (r.tank||'').toString().trim();
+    return 'BL|nt|' + dateKey + '|' + vendor + '|' + time + '|' + driver + '|' + tank + '|' + r.gallons;
   } else {
-    return dateKey + '|' + (r.customer||'').toLowerCase().trim() + '|' + Math.round(r.tons * 100) / 100;
+    var bol = (r.bol||'').toString().trim();
+    var customer = (r.customer||'').toLowerCase().trim();
+    if(bol){
+      return 'DP|b|' + customer + '|' + bol;
+    }
+    var time = (r.time||'').toString().trim();
+    var truck = (r.truck||'').toString().trim().toLowerCase();
+    var product = (r.product||'').toString().trim().toLowerCase();
+    return 'DP|nb|' + dateKey + '|' + customer + '|' + time + '|' + truck + '|' + product + '|' + r.tons + '|' + r.weight + '|' + r.quantity;
   }
 }
 
@@ -2922,8 +2944,8 @@ function _generatePDF(records){
   var customerName = customer === 'ALL' ? 'VIRESCO Plant-Wide' : customer;
   var streamName = tab === 'bulk' ? 'Bulk Liquid' : 'DePak Organics';
   var reportTitle = customer === 'ALL'
-    ? 'VIRESCO ' + streamName + ' Report'
-    : customer + ' \u2014 ' + streamName + ' Report';
+    ? 'VIRESCO ' + streamName + ' Performance Report'
+    : customer + ' \u2014 ' + streamName + ' Performance Report';
   var reportId = (tab==='bulk'?'BL':'DP') + '-' +
     (customer==='ALL' ? 'PLANT' : customer.replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,8)) +
     '-' + new Date().getTime().toString().substring(7);
@@ -3084,13 +3106,13 @@ function _generatePDF(records){
     doc.setFont('helvetica','normal');
     doc.setFontSize(7);
     setText(P.ink500);
-    doc.text(clean(label).toUpperCase(), x + 10, y + 17);
+    doc.text(clean(label).toUpperCase(), x + 10, y + 18);
 
-    // Value (large)
+    // Value (large) — slightly bigger, positioned with breathing room
     doc.setFont('helvetica','bold');
-    doc.setFontSize(20);
+    doc.setFontSize(22);
     setText(P.green900);
-    var vy = y + 42;
+    var vy = y + 46;
     doc.text(clean(value), x + 10, vy);
 
     // Unit beside value
@@ -3099,32 +3121,30 @@ function _generatePDF(records){
       doc.setFont('helvetica','normal');
       doc.setFontSize(9);
       setText(P.ink500);
-      doc.text(clean(unit), x + 10 + valW + 4, vy);
+      doc.text(clean(unit), x + 10 + valW + 5, vy);
     }
 
-    // Delta line — only shown when prior is meaningful
+    // Delta line — only shown when prior is meaningful, or "all-time total" for lifetime
+    // For first reporting period (no prior data), simply omit the delta line entirely
     if(priorLabel && priorMeaningful){
       var delta = fmtDelta(curr, priorVal);
       doc.setFont('helvetica','bold');
       doc.setFontSize(7);
       var deltaColor = delta.dir==='pos' ? P.pos : delta.dir==='neg' ? P.neg : P.ink400;
       setText(deltaColor);
-      doc.text(clean(delta.text), x + 10, y + 56);
+      doc.text(clean(delta.text), x + 10, y + 62);
       doc.setFont('helvetica','normal');
       setText(P.ink400);
       var dw = doc.getTextWidth(clean(delta.text));
-      doc.text('vs ' + clean(priorLabel), x + 10 + dw + 5, y + 56);
-    } else if(priorLabel){
+      doc.text('vs ' + clean(priorLabel), x + 10 + dw + 5, y + 62);
+    } else if(!priorLabel){
+      // Lifetime view
       doc.setFont('helvetica','italic');
       doc.setFontSize(7);
       setText(P.ink300);
-      doc.text('first reporting period', x + 10, y + 56);
-    } else {
-      doc.setFont('helvetica','italic');
-      doc.setFontSize(7);
-      setText(P.ink300);
-      doc.text('all-time total', x + 10, y + 56);
+      doc.text('all-time total', x + 10, y + 62);
     }
+    // else: priorLabel exists but priorMeaningful is false (first reporting period) → omit silently
   }
 
   // Word wrap helper
@@ -3134,42 +3154,158 @@ function _generatePDF(records){
   }
 
   // ===========================================================
-  // PAGE 1 — COVER + EXECUTIVE SUMMARY
+  // PAGE 1 — FULL COVER PAGE (Denali-style)
   // ===========================================================
-  drawPageHeader(1, 5);
+  // Top brand band — solid green-900 covering ~22% of page
+  setFill(P.green900);
+  doc.rect(0, 0, pageW, 170, 'F');
 
-  var y = 60;
-
-  // Big report title block
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(9);
-  setText(P.green700);
-  doc.text(clean(streamName).toUpperCase() + '   \u00B7   ' + (customer==='ALL'?'PLANT-WIDE':clean(customerName).toUpperCase()), margin, y);
-
-  y += 22;
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(28);
-  setText(P.ink900);
-  doc.text(clean(customerName), margin, y);
-
-  // Yellow accent rule
-  y += 6;
+  // Yellow accent line at the bottom of the brand band
   setFill(P.yellow500);
-  doc.rect(margin, y, 50, 3, 'F');
+  doc.rect(0, 170, pageW, 3, 'F');
 
-  y += 18;
+  // VIRESCO wordmark — large, white, top-left
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(32);
+  setText(P.white);
+  doc.text('VIRESCO', margin, 70);
+
+  // Subtitle under brand
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(11);
+  setText(P.green200);
+  doc.text('Anaerobic Digestion  |  Turtle Lake, Wisconsin', margin, 90);
+
+  // Confidential marker on right side of brand band
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8);
+  setText(P.green200);
+  doc.text('CONFIDENTIAL', pageW - margin, 70, {align:'right'});
+  doc.text('For Authorized Recipients Only', pageW - margin, 82, {align:'right'});
+
+  // ===== Main content area (below brand band) =====
+  var coverY = 240;
+
+  // Stream eyebrow
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  setText(P.green700);
+  doc.text(clean(streamName).toUpperCase(), margin, coverY);
+
+  // Yellow underscore for the eyebrow
+  setFill(P.yellow500);
+  doc.rect(margin, coverY + 4, 30, 2, 'F');
+
+  // Report title — huge
+  coverY += 36;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(36);
+  setText(P.ink900);
+  var reportTypeTitle = clean(streamName) + ' Performance Report';
+  doc.text(reportTypeTitle, margin, coverY);
+
+  // Customer name — large secondary
+  coverY += 32;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(22);
+  setText(P.green700);
+  doc.text(clean(customerName), margin, coverY);
+
+  // Period range
+  coverY += 26;
   doc.setFont('helvetica','normal');
   doc.setFontSize(13);
   setText(P.ink500);
-  doc.text(clean(range.label), margin, y);
+  doc.text(clean(range.label), margin, coverY);
 
-  y += 22;
+  // Spacer
+  coverY += 80;
+
+  // ===== Hero stat block (bottom third) =====
+  // Three big numbers in a horizontal strip
+  setDraw(P.line300);
+  doc.setLineWidth(0.5);
+  doc.line(margin, coverY, pageW - margin, coverY);
+
+  coverY += 24;
+
+  var heroW = contentW / 3;
+  function heroStat(x, label, value, sub){
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    setText(P.ink400);
+    doc.text(clean(label).toUpperCase(), x, coverY);
+
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(28);
+    setText(P.green900);
+    doc.text(clean(value), x, coverY + 28);
+
+    if(sub){
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(8);
+      setText(P.ink400);
+      doc.text(clean(sub), x, coverY + 42);
+    }
+  }
+
+  if(tab === 'bulk'){
+    heroStat(margin, 'Total Volume', fmtCompact(summary.gallons), 'gallons processed');
+    heroStat(margin + heroW, 'GHG Avoided', fmt(summary.ghg, 0), 'tons CO2 equivalent');
+    heroStat(margin + 2*heroW, 'Renewable Energy', fmtCompact(summary.kwh), 'kWh generated');
+  } else {
+    heroStat(margin, 'Total Tonnage', fmt(summary.tons, 1), 'tons processed');
+    heroStat(margin + heroW, 'GHG Avoided', fmt(summary.ghg, 0), 'tons CO2 equivalent');
+    heroStat(margin + 2*heroW, 'Renewable Energy', fmtCompact(summary.kwh), 'kWh generated');
+  }
+
+  coverY += 64;
+  setDraw(P.line300);
+  doc.setLineWidth(0.5);
+  doc.line(margin, coverY, pageW - margin, coverY);
+
+  // ===== Cover footer =====
+  // Pinned to bottom of cover page
+  var footY = pageH - 80;
+
+  // Green accent block on left
+  setFill(P.green700);
+  doc.rect(margin, footY, 3, 40, 'F');
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(8);
+  setText(P.ink700);
+  doc.text('PREPARED BY', margin + 12, footY + 10);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  setText(P.green900);
+  doc.text('VIRESCO AD LLC', margin + 12, footY + 25);
   doc.setFont('helvetica','normal');
-  doc.setFontSize(9);
-  setText(P.ink400);
-  doc.text('Generated ' + new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '  \u00B7  Prepared by VIRESCO', margin, y);
+  doc.setFontSize(8);
+  setText(P.ink500);
+  doc.text('465 Western Blvd, Turtle Lake, WI', margin + 12, footY + 36);
 
-  y += 30;
+  // Right side: generation date & report ID
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(8);
+  setText(P.ink700);
+  doc.text('GENERATED', pageW - margin, footY + 10, {align:'right'});
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(11);
+  setText(P.green900);
+  doc.text(new Date().toLocaleDateString('en-US',{month:'long', day:'numeric', year:'numeric'}), pageW - margin, footY + 25, {align:'right'});
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(7);
+  setText(P.ink400);
+  doc.text('Report ID: ' + reportId, pageW - margin, footY + 36, {align:'right'});
+
+  // ===========================================================
+  // PAGE 2 — EXECUTIVE SUMMARY
+  // ===========================================================
+  doc.addPage();
+  drawPageHeader(2, 6);
+
+  var y = 60;
 
   // EXECUTIVE SUMMARY section
   y = sectionBar('Executive Summary', range.compact, y);
@@ -3289,13 +3425,13 @@ function _generatePDF(records){
     }
   }
 
-  drawPageFooter(1);
+  drawPageFooter(2);
 
   // ===========================================================
   // PAGE 2 — VOLUME ANALYTICS
   // ===========================================================
   doc.addPage();
-  drawPageHeader(2, 5);
+  drawPageHeader(3, 6);
   y = 60;
 
   y = sectionBar('Volume Analytics', clean(tab==='bulk' ? 'Daily and monthly throughput' : 'Daily and monthly tonnage'), y);
@@ -3383,13 +3519,13 @@ function _generatePDF(records){
     statTile(margin + 3*statW, 'Active Days', uniqueDays + ' of ' + totalDays);
   }
 
-  drawPageFooter(2);
+  drawPageFooter(3);
 
   // ===========================================================
   // PAGE 3 — SUSTAINABILITY IMPACT (with big-number callouts)
   // ===========================================================
   doc.addPage();
-  drawPageHeader(3, 5);
+  drawPageHeader(4, 6);
   y = 60;
 
   y = sectionBar('Sustainability Impact', 'CARB ANDOC + EPA Equivalency Factors', y);
@@ -3503,13 +3639,13 @@ function _generatePDF(records){
     doc.text(methLines, margin + 12, methY + 28);
   }
 
-  drawPageFooter(3);
+  drawPageFooter(4);
 
   // ===========================================================
   // PAGE 4 — RANKINGS / OPERATIONAL DETAIL
   // ===========================================================
   doc.addPage();
-  drawPageHeader(4, 5);
+  drawPageHeader(5, 6);
   y = 60;
 
   if(customer === 'ALL'){
@@ -3744,13 +3880,13 @@ function _generatePDF(records){
     });
   }
 
-  drawPageFooter(4);
+  drawPageFooter(5);
 
   // ===========================================================
   // PAGE 5+ — INTAKE LOG DETAIL (continues across pages)
   // ===========================================================
   doc.addPage();
-  drawPageHeader(5, 5);
+  drawPageHeader(6, 6);
   y = 60;
   y = sectionBar('Intake Log Detail', fmt(records.length) + ' records  |  ' + clean(range.label.replace(/Lifetime \(|\)$/g,'')), y);
 
@@ -3811,7 +3947,7 @@ function _generatePDF(records){
       3: {halign:'right'}, 4: {halign:'right'}, 6: {halign:'right', fontStyle:'bold'}
     },
     didDrawPage: function(data){
-      var pageNum = data.pageNumber + 4; // pages 5+
+      var pageNum = data.pageNumber + 5; // pages 6+
       // Re-draw header/footer for autoTable spawned pages
       if(data.pageNumber > 1){
         drawPageHeader(pageNum, pageNum);
@@ -3846,7 +3982,7 @@ function _generatePDF(records){
     doc.text('Report ID: ' + reportId, margin + 14, finalY + 62);
   }
 
-  drawPageFooter(5);
+  drawPageFooter(6);
 
   // ===========================================================
   // SAVE
