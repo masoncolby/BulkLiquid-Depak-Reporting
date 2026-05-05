@@ -1,0 +1,3015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VIRESCO — Bulk Liquid & DePak Reporting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{
+  /* VIRESCO palette — restrained */
+  --green-900:#1a3d33;
+  --green-700:#285c4d;
+  --green-500:#71cc98;
+  --green-300:#a8e0bc;
+  --green-100:#e6f2ec;
+  --green-50:#f3f8f5;
+  --yellow-500:#ede04b;
+  --yellow-300:#f4eb89;
+  --yellow-100:#faf6d4;
+  /* Neutrals */
+  --ink-900:#0f1410;
+  --ink-700:#1a1f1d;
+  --ink-500:#3d4540;
+  --ink-300:#6b7270;
+  --ink-200:#9ca29f;
+  --line-300:#e5e7e5;
+  --line-200:#eef0ee;
+  --line-100:#f5f6f5;
+  --bg-page:#fafbfa;
+  --bg-card:#ffffff;
+  --bg-muted:#f3f5f3;
+  /* Semantic */
+  --pos:#1f7a55;
+  --neg:#b04a3a;
+  --warn:#a87b08;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  background:var(--bg-page);
+  color:var(--ink-700);
+  font-size:13px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  font-feature-settings:'cv08','cv11','ss01','tnum';
+}
+button,select,input{font-family:inherit;font-size:13px}
+.tabular{font-variant-numeric:tabular-nums}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-feature-settings:'tnum'}
+
+/* === HEADER === */
+.hdr{
+  background:var(--bg-card);
+  border-bottom:1px solid var(--line-300);
+  padding:10px 24px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.hdr-left{display:flex;align-items:center;gap:14px}
+.brand{font-size:15px;font-weight:600;color:var(--green-700);letter-spacing:-0.01em}
+.divider-v{width:1px;height:16px;background:var(--line-300)}
+.hdr-sub{font-size:12px;color:var(--ink-300)}
+.hdr-right{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--ink-300)}
+.hdr-dot{color:#c5c9c5}
+
+/* === STREAM TABS === */
+.tabs{
+  background:var(--bg-card);
+  border-bottom:1px solid var(--line-300);
+  padding:0 24px;
+  display:flex;
+  gap:0;
+}
+.tab{
+  padding:10px 16px;
+  font-size:12px;
+  font-weight:500;
+  color:var(--ink-300);
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+  cursor:pointer;
+  border-bottom:2px solid transparent;
+  background:transparent;
+  border-top:none;border-left:none;border-right:none;
+  transition:color 0.12s, border-color 0.12s;
+}
+.tab:hover{color:var(--ink-700)}
+.tab.active{color:var(--green-700);border-bottom-color:var(--green-700);font-weight:600}
+
+/* === FILTER BAR === */
+.filter-bar{
+  background:var(--bg-card);
+  border-bottom:1px solid var(--line-300);
+  padding:10px 24px;
+  display:flex;
+  gap:18px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.filter-grp{display:flex;align-items:center;gap:8px}
+.filter-label{
+  font-size:10px;
+  color:var(--ink-300);
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  font-weight:600;
+}
+.filter-select{
+  padding:5px 10px;
+  font-size:12px;
+  color:var(--ink-700);
+  background:var(--bg-muted);
+  border:1px solid var(--line-300);
+  border-radius:4px;
+  cursor:pointer;
+  min-width:150px;
+}
+.filter-select:hover{background:var(--bg-card);border-color:var(--ink-200)}
+.filter-select:focus{outline:none;border-color:var(--green-700)}
+
+.period-seg{
+  display:flex;
+  border:1px solid var(--line-300);
+  border-radius:4px;
+  overflow:hidden;
+  background:var(--bg-card);
+}
+.period-seg button{
+  padding:5px 11px;
+  font-size:12px;
+  color:var(--ink-300);
+  background:var(--bg-card);
+  border:none;
+  border-right:1px solid var(--line-300);
+  cursor:pointer;
+  font-weight:500;
+}
+.period-seg button:last-child{border-right:none}
+.period-seg button:hover{color:var(--ink-700)}
+.period-seg button.active{background:var(--green-700);color:#fff}
+
+.filter-input{
+  padding:5px 10px;
+  font-size:12px;
+  border:1px solid var(--line-300);
+  border-radius:4px;
+  background:var(--bg-card);
+}
+.filter-input:focus{outline:none;border-color:var(--green-700)}
+
+.btn-spacer{margin-left:auto;display:flex;gap:6px;align-items:center}
+.btn{
+  padding:6px 13px;
+  font-size:12px;
+  font-weight:500;
+  border-radius:4px;
+  cursor:pointer;
+  border:1px solid transparent;
+  transition:all 0.12s;
+}
+.btn-primary{background:var(--green-700);color:#fff;border-color:var(--green-700)}
+.btn-primary:hover{background:var(--green-900);border-color:var(--green-900)}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed}
+.btn-ghost{background:var(--bg-card);color:var(--green-700);border-color:var(--green-700)}
+.btn-ghost:hover{background:var(--green-50)}
+.btn-subtle{background:var(--bg-card);color:var(--ink-500);border-color:var(--line-300)}
+.btn-subtle:hover{background:var(--bg-muted);color:var(--ink-700)}
+
+/* === SECTION TABS === */
+.section-tabs{
+  background:var(--bg-card);
+  border-bottom:1px solid var(--line-300);
+  padding:0 24px;
+  display:flex;
+  gap:0;
+}
+.section-tab{
+  padding:8px 14px;
+  font-size:12px;
+  font-weight:500;
+  color:var(--ink-300);
+  cursor:pointer;
+  border-bottom:2px solid transparent;
+  background:transparent;
+  border-top:none;border-left:none;border-right:none;
+  letter-spacing:0.02em;
+}
+.section-tab:hover{color:var(--ink-700)}
+.section-tab.active{color:var(--green-700);border-bottom-color:var(--green-700);font-weight:600}
+
+/* === MAIN CONTENT === */
+.main{padding:0}
+.section{display:none;padding:14px 24px 24px}
+.section.active{display:block}
+
+/* === KPI STRIP === */
+.kpi-strip{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:1px;
+  background:var(--line-300);
+  border:1px solid var(--line-300);
+  border-radius:4px;
+  margin-bottom:14px;
+  overflow:hidden;
+}
+.kpi-card{
+  background:var(--bg-card);
+  padding:11px 14px;
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+.kpi-label{
+  font-size:10px;
+  color:var(--ink-300);
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  font-weight:600;
+  margin-bottom:5px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.kpi-value{
+  font-size:22px;
+  font-weight:600;
+  color:var(--ink-900);
+  line-height:1.1;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-0.01em;
+}
+.kpi-unit{
+  font-size:11px;
+  font-weight:500;
+  color:var(--ink-300);
+  margin-left:3px;
+}
+.kpi-meta{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-top:5px;
+  font-size:11px;
+  font-variant-numeric:tabular-nums;
+}
+.delta-pos{color:var(--pos);font-weight:600}
+.delta-neg{color:var(--neg);font-weight:600}
+.delta-flat{color:var(--ink-300);font-weight:600}
+.kpi-vs{color:var(--ink-300)}
+.kpi-spark{
+  margin-top:7px;
+  height:22px;
+  width:100%;
+}
+
+/* === CARDS === */
+.card{
+  background:var(--bg-card);
+  border:1px solid var(--line-300);
+  border-radius:4px;
+  padding:14px 16px;
+  margin-bottom:14px;
+}
+.card-hdr{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  margin-bottom:4px;
+}
+.card-title{
+  font-size:12px;
+  font-weight:600;
+  color:var(--ink-700);
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+}
+.card-meta{font-size:11px;color:var(--ink-300)}
+.card-sub{font-size:11px;color:var(--ink-300);margin-bottom:12px}
+
+/* === GRID LAYOUTS === */
+.grid-2-1{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;margin-bottom:14px}
+.grid-1-1{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.grid-1{display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:14px}
+
+/* === CHARTS === */
+.chart-wrap{position:relative;height:240px;width:100%}
+.chart-wrap-tall{position:relative;height:300px;width:100%}
+
+/* === DATA TABLES === */
+.dt{
+  width:100%;
+  border-collapse:collapse;
+  font-variant-numeric:tabular-nums;
+}
+.dt thead th{
+  text-align:left;
+  font-size:10px;
+  color:var(--ink-300);
+  font-weight:600;
+  padding:6px 10px 6px 0;
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+  border-bottom:1px solid var(--line-300);
+}
+.dt tbody td{
+  padding:7px 10px 7px 0;
+  font-size:12px;
+  color:var(--ink-700);
+  border-bottom:1px solid var(--line-200);
+}
+.dt tbody tr:last-child td{border-bottom:none}
+.dt tbody tr:hover{background:var(--bg-muted)}
+.dt .num{text-align:right}
+.dt .num-th{text-align:right}
+
+/* Inline progress bar in table cell */
+.bar-cell{display:inline-flex;align-items:center;gap:8px}
+.bar-track{
+  display:inline-block;
+  width:48px;
+  height:5px;
+  background:var(--line-200);
+  border-radius:0;
+  overflow:hidden;
+}
+.bar-fill{display:block;height:100%;background:var(--green-700)}
+.bar-fill-mid{background:var(--green-500)}
+.bar-fill-light{background:var(--ink-200)}
+
+.dt-tot{
+  background:var(--green-50);
+  font-weight:600;
+}
+.dt-tot td{
+  border-top:2px solid var(--green-700) !important;
+  border-bottom:none !important;
+  font-weight:600;
+  color:var(--green-900);
+}
+
+/* === LOG TABLE (denser) === */
+.log-wrap{
+  max-height:600px;
+  overflow:auto;
+  border:1px solid var(--line-300);
+  border-radius:4px;
+}
+.log-table{
+  width:100%;
+  border-collapse:collapse;
+  font-variant-numeric:tabular-nums;
+}
+.log-table thead th{
+  position:sticky;
+  top:0;
+  background:var(--green-700);
+  color:#fff;
+  font-size:10px;
+  font-weight:600;
+  text-align:left;
+  padding:7px 10px;
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+  z-index:1;
+  white-space:nowrap;
+}
+.log-table tbody td{
+  padding:6px 10px;
+  font-size:11px;
+  color:var(--ink-700);
+  border-bottom:1px solid var(--line-200);
+}
+.log-table tbody tr:nth-child(even){background:var(--line-100)}
+.log-table tbody tr:hover{background:var(--green-50)}
+.log-table .num{text-align:right;font-weight:500}
+
+/* === UPLOAD SCREEN === */
+.upload-screen{
+  min-height:calc(100vh - 56px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:40px;
+}
+.upload-card{
+  background:var(--bg-card);
+  border:1px solid var(--line-300);
+  border-radius:6px;
+  padding:36px;
+  max-width:520px;
+  width:100%;
+}
+.upload-card h2{
+  font-size:18px;
+  font-weight:600;
+  color:var(--ink-900);
+  margin-bottom:6px;
+  letter-spacing:-0.01em;
+}
+.upload-card p{
+  font-size:13px;
+  color:var(--ink-300);
+  margin-bottom:20px;
+}
+.upload-row{
+  display:flex;
+  gap:8px;
+  flex-direction:column;
+  margin-bottom:14px;
+}
+.upload-btn-block{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 14px;
+  border:1px solid var(--line-300);
+  border-radius:4px;
+  cursor:pointer;
+  transition:all 0.12s;
+  background:var(--bg-card);
+}
+.upload-btn-block:hover{border-color:var(--green-700);background:var(--green-50)}
+.upload-btn-block.loaded{border-color:var(--green-500);background:var(--green-50)}
+.upload-btn-text{display:flex;flex-direction:column;gap:2px}
+.upload-btn-title{font-size:13px;font-weight:500;color:var(--ink-700)}
+.upload-btn-sub{font-size:11px;color:var(--ink-300)}
+.upload-btn-status{font-size:11px;font-weight:500;color:var(--ink-300)}
+.upload-btn-status.ok{color:var(--pos)}
+.upload-btn-block input[type=file]{display:none}
+.upload-info{
+  margin-top:14px;
+  padding:10px 12px;
+  background:var(--bg-muted);
+  border-radius:4px;
+  font-size:11px;
+  color:var(--ink-300);
+  line-height:1.5;
+}
+.upload-info code{
+  background:var(--bg-card);
+  padding:1px 5px;
+  border-radius:3px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  color:var(--ink-700);
+}
+
+/* === EMPTY STATE === */
+.empty{
+  text-align:center;
+  padding:40px;
+  color:var(--ink-300);
+  font-size:12px;
+}
+
+/* === TOAST === */
+.toast{
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  background:var(--ink-900);
+  color:#fff;
+  padding:10px 16px;
+  border-radius:4px;
+  font-size:12px;
+  font-weight:500;
+  box-shadow:0 4px 16px rgba(0,0,0,0.18);
+  z-index:1000;
+  display:none;
+  max-width:340px;
+}
+.toast.show{display:block}
+.toast.error{background:var(--neg)}
+
+/* === METHODOLOGY CALLOUT === */
+.method{
+  background:var(--green-50);
+  border-left:2px solid var(--green-700);
+  padding:10px 14px;
+  border-radius:0 4px 4px 0;
+  font-size:11px;
+  color:var(--ink-500);
+  line-height:1.6;
+  margin-top:12px;
+}
+.method strong{color:var(--green-900);font-weight:600}
+
+/* === RESPONSIVE === */
+@media (max-width: 1100px){
+  .kpi-strip{grid-template-columns:repeat(3,1fr)}
+  .grid-2-1{grid-template-columns:1fr}
+  .grid-1-1{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-left">
+    <div class="brand">VIRESCO</div>
+    <div class="divider-v"></div>
+    <div class="hdr-sub">Bulk Liquid &amp; DePak Reporting</div>
+  </div>
+  <div class="hdr-right">
+    <span id="lastUpdated">—</span>
+    <span class="hdr-dot">·</span>
+    <span>Turtle Lake, WI</span>
+  </div>
+</div>
+
+<!-- STREAM TABS -->
+<div class="tabs" id="tabNav" style="display:none">
+  <button class="tab active" data-tab="bulk">Bulk Liquid</button>
+  <button class="tab" data-tab="depak">DePak Organics</button>
+</div>
+
+<!-- UPLOAD SCREEN -->
+<div class="upload-screen" id="uploadScreen">
+  <div class="upload-card">
+    <h2>Upload Intake Logs</h2>
+    <p>Upload one or both Excel intake logs to begin reporting.</p>
+
+    <div class="upload-row">
+      <label class="upload-btn-block" id="bulkUploadBlock">
+        <div class="upload-btn-text">
+          <div class="upload-btn-title">Bulk Liquid Log</div>
+          <div class="upload-btn-sub">Reads sheet "Intake Log"</div>
+        </div>
+        <div class="upload-btn-status" id="bulkStatus">Click to upload</div>
+        <input type="file" id="bulkUpload" accept=".xlsx,.xls">
+      </label>
+
+      <label class="upload-btn-block" id="depakUploadBlock">
+        <div class="upload-btn-text">
+          <div class="upload-btn-title">DePak Organics Log</div>
+          <div class="upload-btn-sub">Reads sheet "Intake"</div>
+        </div>
+        <div class="upload-btn-status" id="depakStatus">Click to upload</div>
+        <input type="file" id="depakUpload" accept=".xlsx,.xls">
+      </label>
+    </div>
+
+    <div class="upload-info">
+      Required columns — <strong>Bulk Liquid:</strong> <code>Date</code>, <code>Vendor</code>, <code>Gallons</code> · <strong>DePak:</strong> <code>Date</code>, <code>Customer</code>, <code>Tons</code>. Optional fields are detected automatically.
+    </div>
+  </div>
+</div>
+
+<!-- FILTER BAR -->
+<div class="filter-bar" id="filterBar" style="display:none">
+  <div class="filter-grp">
+    <span class="filter-label" id="custLabel">Vendor</span>
+    <select class="filter-select" id="customerSel"></select>
+  </div>
+
+  <div class="filter-grp">
+    <span class="filter-label">Period</span>
+    <div class="period-seg" id="periodBtns">
+      <button data-period="month" class="active">Month</button>
+      <button data-period="quarter">Quarter</button>
+      <button data-period="ytd">YTD</button>
+      <button data-period="annual">Annual</button>
+      <button data-period="custom">Custom</button>
+    </div>
+  </div>
+
+  <div class="filter-grp" id="monthYearGrp">
+    <span class="filter-label" id="rangeLabel">Range</span>
+    <select class="filter-select" id="monthSel" style="min-width:110px"></select>
+    <select class="filter-select" id="yearSel" style="min-width:80px"></select>
+  </div>
+
+  <div class="filter-grp" id="customRangeGrp" style="display:none">
+    <span class="filter-label">From</span>
+    <input type="date" class="filter-input" id="startDate">
+    <span class="filter-label">To</span>
+    <input type="date" class="filter-input" id="endDate">
+  </div>
+
+  <div class="btn-spacer">
+    <button class="btn btn-subtle" id="replaceBtn">Replace File</button>
+    <button class="btn btn-primary" id="generateBtn">Export PDF</button>
+  </div>
+</div>
+
+<!-- SECTION TABS -->
+<div class="section-tabs" id="sectionTabs" style="display:none">
+  <button class="section-tab active" data-sec="overview">Overview</button>
+  <button class="section-tab" data-sec="sustain">Sustainability</button>
+  <button class="section-tab" data-sec="ops">Operations</button>
+  <button class="section-tab" data-sec="rankings">Rankings</button>
+  <button class="section-tab" data-sec="log">Intake Log</button>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main" id="mainContent" style="display:none">
+
+  <!-- OVERVIEW -->
+  <div class="section active" id="sec-overview">
+    <div class="kpi-strip" id="overviewKpis"></div>
+    <div class="grid-2-1">
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title" id="dailyChartTitle">Daily Volume</div>
+          <div class="card-meta" id="dailyChartMeta"></div>
+        </div>
+        <div class="card-sub" id="dailyChartSub"></div>
+        <div class="chart-wrap"><canvas id="chartDaily"></canvas></div>
+      </div>
+      <div class="card" id="distCard">
+        <div class="card-hdr">
+          <div class="card-title" id="distTitle">Strength &amp; Tank Routing</div>
+          <div class="card-meta">% of total</div>
+        </div>
+        <div id="distContent"></div>
+      </div>
+    </div>
+    <div class="grid-2-1">
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title">Monthly Trend</div>
+          <div class="card-meta">Last 12 months</div>
+        </div>
+        <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title">Operational Summary</div>
+          <div class="card-meta" id="opsSummaryMeta"></div>
+        </div>
+        <table class="dt" id="opsSummaryTable"></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUSTAINABILITY -->
+  <div class="section" id="sec-sustain">
+    <div class="kpi-strip" id="susKpis"></div>
+    <div class="grid-2-1">
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title">Energy &amp; GHG Trend</div>
+          <div class="card-meta">Monthly output</div>
+        </div>
+        <div class="chart-wrap"><canvas id="chartEnergyGhg"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title">Equivalent Impact</div>
+          <div class="card-meta">Real-world translations</div>
+        </div>
+        <table class="dt" id="equivTable"></table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title">Sustainability Detail</div>
+        <div class="card-meta" id="susSubTitle"></div>
+      </div>
+      <table class="dt" id="susTable"></table>
+      <div class="method" id="susMethod"></div>
+    </div>
+  </div>
+
+  <!-- OPERATIONS -->
+  <div class="section" id="sec-ops">
+    <div class="kpi-strip" id="opsKpis"></div>
+    <div class="grid-1-1">
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title">Weekly Volume</div>
+          <div class="card-meta" id="weeklyMeta"></div>
+        </div>
+        <div class="chart-wrap"><canvas id="chartWeekly"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title" id="opsBreakdownTitle">Breakdown by Type</div>
+          <div class="card-meta">Volume by category</div>
+        </div>
+        <table class="dt" id="opsBreakdownTable"></table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title">Day-of-Week Distribution</div>
+        <div class="card-meta">Operational rhythm</div>
+      </div>
+      <div class="chart-wrap"><canvas id="chartDow"></canvas></div>
+    </div>
+  </div>
+
+  <!-- RANKINGS -->
+  <div class="section" id="sec-rankings">
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title" id="rankTitle">Top Vendors</div>
+        <div class="card-meta" id="rankSub"></div>
+      </div>
+      <table class="dt" id="rankTable"></table>
+    </div>
+  </div>
+
+  <!-- INTAKE LOG -->
+  <div class="section" id="sec-log">
+    <div class="card">
+      <div class="card-hdr">
+        <div class="card-title">Filtered Intake Log</div>
+        <div class="card-meta" id="logSub"></div>
+      </div>
+      <div class="log-wrap">
+        <table class="log-table" id="logTable"></table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// =============================================================
+// CONSTANTS & SUSTAINABILITY FACTOR SHEET
+// =============================================================
+var SF = {
+  // DePak (mass-based)
+  ghg_per_ton: 0.62,
+  biogas_m3_per_ton: 100,
+  digester_eff: 0.73,
+  energy_kwh_per_m3: 4,
+  npk_kg_per_ton: 15,
+  // Bulk Liquid (carbon-content based)
+  density_lbs_per_gal: 8.34,
+  carbon_ppm: 20000,
+  scf_per_lb_carbon: 23,
+  kwh_per_lb_carbon: 1.34,
+  // Universal
+  scf_to_mmbtu: 0.001037,
+  m3_to_scf: 35.3147,
+  m3_to_mmbtu: 0.03663,
+  household_kwh_monthly: 893,
+  household_mmbtu_monthly: 32.7,
+  car_per_month: 0.383,
+  tree_per_year: 0.06,
+  miles_per_tco2e: 2481
+};
+
+// VIRESCO palette (for charts — Chart.js can't read CSS vars)
+var VC = {
+  green900:'#1a3d33',
+  green700:'#285c4d',
+  green500:'#71cc98',
+  green300:'#a8e0bc',
+  green100:'#e6f2ec',
+  yellow500:'#ede04b',
+  yellow300:'#f4eb89',
+  ink900:'#0f1410',
+  ink700:'#1a1f1d',
+  ink500:'#3d4540',
+  ink300:'#6b7270',
+  ink200:'#9ca29f',
+  line300:'#e5e7e5',
+  line100:'#f5f6f5',
+  pos:'#1f7a55',
+  neg:'#b04a3a'
+};
+
+// =============================================================
+// STATE
+// =============================================================
+var STATE = {
+  bulkData: null,
+  depakData: null,
+  activeTab: 'bulk',
+  activeSection: 'overview',
+  filters: {
+    customer: 'ALL',
+    period: 'month',
+    month: null,
+    year: null,
+    startDate: null,
+    endDate: null
+  },
+  charts: {}
+};
+
+// =============================================================
+// FORMATTERS
+// =============================================================
+function fmt(n, d){
+  if(n === null || n === undefined || isNaN(n)) return '0';
+  d = d === undefined ? 0 : d;
+  return Number(n).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
+}
+function fmtCompact(n){
+  if(Math.abs(n) >= 1e9) return fmt(n/1e9, 2)+'B';
+  if(Math.abs(n) >= 1e6) return fmt(n/1e6, 2)+'M';
+  if(Math.abs(n) >= 1e3) return fmt(n/1e3, 1)+'K';
+  return fmt(n, 0);
+}
+function fmtDelta(curr, prior){
+  if(prior === null || prior === undefined || prior === 0){
+    return {text:'—', cls:'delta-flat', dir:'flat', pct:null};
+  }
+  var pct = ((curr - prior) / prior) * 100;
+  var dir = pct > 0.1 ? 'pos' : pct < -0.1 ? 'neg' : 'flat';
+  var sign = pct > 0 ? '+' : '';
+  var arrow = dir==='pos' ? '\u25B2' : dir==='neg' ? '\u25BC' : '\u2014';
+  return {
+    text: arrow + ' ' + sign + fmt(pct, 1) + '%',
+    cls: dir==='pos' ? 'delta-pos' : dir==='neg' ? 'delta-neg' : 'delta-flat',
+    dir: dir,
+    pct: pct
+  };
+}
+function fmtDate(d){
+  if(!d) return '';
+  return d.toLocaleDateString('en-US', {year:'numeric', month:'short', day:'numeric'});
+}
+function fmtDateShort(d){
+  if(!d) return '';
+  return (d.getMonth()+1)+'/'+d.getDate();
+}
+function monthName(m){return ['January','February','March','April','May','June','July','August','September','October','November','December'][m]}
+function monthShort(m){return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m]}
+
+// Set last updated time
+document.getElementById('lastUpdated').textContent = 'Last updated ' + new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+
+function showToast(msg, isError){
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function(){ t.classList.remove('show') }, 3500);
+}
+
+function destroyChart(id){
+  if(STATE.charts[id]){ STATE.charts[id].destroy(); delete STATE.charts[id]; }
+}
+
+// =============================================================
+// CALCULATION ENGINE
+// =============================================================
+function calcBulkLiquid(records){
+  var totalGal = records.reduce(function(s,r){return s+(r.gallons||0)}, 0);
+  var totalLbs = totalGal * SF.density_lbs_per_gal;
+  var lbsCarbon = totalLbs * SF.carbon_ppm / 1000000;
+  var scfBiogas = lbsCarbon * SF.scf_per_lb_carbon;
+  var m3Biogas = scfBiogas / SF.m3_to_scf;
+  var mmbtu = scfBiogas * SF.scf_to_mmbtu;
+  var kwh = lbsCarbon * SF.kwh_per_lb_carbon;
+  var ghg = totalGal * SF.density_lbs_per_gal / 2000 * SF.ghg_per_ton;
+  var households = mmbtu / SF.household_mmbtu_monthly;
+  var cars = ghg / SF.car_per_month;
+  var trees = ghg / SF.tree_per_year;
+  var miles = ghg * SF.miles_per_tco2e;
+  var digestate_gal = totalGal * 0.95;
+  return {
+    loads: records.length,
+    gallons: totalGal,
+    lbs: totalLbs,
+    tons_mass: totalLbs/2000,
+    lbsCarbon: lbsCarbon,
+    scfBiogas: scfBiogas,
+    m3Biogas: m3Biogas,
+    mmbtu: mmbtu,
+    kwh: kwh,
+    ghg: ghg,
+    households: households,
+    cars: cars,
+    trees: trees,
+    miles: miles,
+    digestate_gal: digestate_gal
+  };
+}
+
+function calcDePak(records){
+  var totalTons = records.reduce(function(s,r){return s+(r.tons||0)}, 0);
+  var totalLbs = records.reduce(function(s,r){return s+(r.weight||0)}, 0);
+  var totalQty = records.reduce(function(s,r){return s+(r.quantity||0)}, 0);
+  var ghg = totalTons * SF.ghg_per_ton;
+  var m3Biogas = totalTons * SF.biogas_m3_per_ton * SF.digester_eff;
+  var scfBiogas = m3Biogas * SF.m3_to_scf;
+  var mmbtu = m3Biogas * SF.m3_to_mmbtu;
+  var kwh = m3Biogas * SF.energy_kwh_per_m3;
+  var npk = totalTons * SF.npk_kg_per_ton;
+  var households = mmbtu / SF.household_mmbtu_monthly;
+  var cars = ghg / SF.car_per_month;
+  var trees = ghg / SF.tree_per_year;
+  var miles = ghg * SF.miles_per_tco2e;
+  return {
+    loads: records.length,
+    tons: totalTons,
+    weight: totalLbs,
+    quantity: totalQty,
+    ghg: ghg,
+    m3Biogas: m3Biogas,
+    scfBiogas: scfBiogas,
+    mmbtu: mmbtu,
+    kwh: kwh,
+    npk: npk,
+    households: households,
+    cars: cars,
+    trees: trees,
+    miles: miles
+  };
+}
+
+function calc(records, tab){
+  return tab === 'bulk' ? calcBulkLiquid(records) : calcDePak(records);
+}
+
+// =============================================================
+// FILE PARSING
+// =============================================================
+function parseBulkLiquid(file, callback){
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      var data = new Uint8Array(e.target.result);
+      var wb = XLSX.read(data, {type:'array', cellDates:true});
+      var sheetName = 'Intake Log';
+      if(!wb.Sheets[sheetName]){
+        var match = wb.SheetNames.find(function(n){return /intake.?log/i.test(n)});
+        if(!match){
+          callback(null, 'Sheet "Intake Log" not found. Available: '+wb.SheetNames.join(', '));
+          return;
+        }
+        sheetName = match;
+      }
+      var sheet = wb.Sheets[sheetName];
+      var rows = XLSX.utils.sheet_to_json(sheet, {raw:false, defval:null});
+      var records = [];
+      rows.forEach(function(r){
+        var dateVal = r['Date'];
+        var date = null;
+        if(dateVal instanceof Date) date = dateVal;
+        else if(dateVal) date = new Date(dateVal);
+        if(!date || isNaN(date.getTime())) return;
+        var vendor = (r['Vendor']||'').toString().trim();
+        var gallons = parseFloat(r['Gallons']);
+        if(!vendor || isNaN(gallons) || gallons <= 0) return;
+        records.push({
+          date: date,
+          time: (r['Time']||'').toString().trim(),
+          vendor: vendor,
+          strength: (r['Strength']||'').toString().trim(),
+          tank: r['Tank'] !== null && r['Tank'] !== undefined ? r['Tank'].toString() : '',
+          gallons: gallons,
+          driver: (r['Driver']||'').toString().trim(),
+          ticket: (r['Ticket #']||r['Ticket']||'').toString().trim(),
+          notes: (r['Special Notes']||'').toString().trim()
+        });
+      });
+      callback(records, null);
+    } catch(err){
+      callback(null, 'Error: '+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseDePak(file, callback){
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      var data = new Uint8Array(e.target.result);
+      var wb = XLSX.read(data, {type:'array', cellDates:true});
+      var sheetName = 'Intake';
+      if(!wb.Sheets[sheetName]){
+        var match = wb.SheetNames.find(function(n){return n.toLowerCase()==='intake'});
+        if(!match){
+          callback(null, 'Sheet "Intake" not found. Available: '+wb.SheetNames.join(', '));
+          return;
+        }
+        sheetName = match;
+      }
+      var sheet = wb.Sheets[sheetName];
+      var rows = XLSX.utils.sheet_to_json(sheet, {raw:false, defval:null});
+      var records = [];
+      rows.forEach(function(r){
+        var dateVal = r['Date'];
+        var date = null;
+        if(dateVal instanceof Date) date = dateVal;
+        else if(dateVal) date = new Date(dateVal);
+        if(!date || isNaN(date.getTime())) return;
+        var customer = (r['Customer']||'').toString().trim();
+        var tons = parseFloat(r['Tons']);
+        if(!customer || isNaN(tons) || tons <= 0) return;
+        records.push({
+          date: date,
+          time: (r['Time']||'').toString().trim(),
+          customer: customer,
+          product: (r['Product']||'').toString().trim(),
+          weight: parseFloat(r['Weight (lbs)'])||0,
+          quantity: parseFloat(r['Quantity'])||0,
+          units: (r['Units']||'').toString().trim(),
+          tons: tons,
+          truck: (r['Truck #']||'').toString().trim(),
+          truckingCo: (r['Trucking Company']||'').toString().trim(),
+          bol: (r['Customer BOL#']||r['VIRESCO BOL#']||'').toString().trim()
+        });
+      });
+      callback(records, null);
+    } catch(err){
+      callback(null, 'Error: '+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// =============================================================
+// UPLOAD HANDLERS
+// =============================================================
+document.getElementById('bulkUpload').addEventListener('change', function(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  document.getElementById('bulkStatus').textContent = 'Parsing…';
+  parseBulkLiquid(file, function(records, err){
+    if(err){
+      document.getElementById('bulkStatus').textContent = err;
+      document.getElementById('bulkStatus').style.color = 'var(--neg)';
+      return;
+    }
+    STATE.bulkData = records;
+    document.getElementById('bulkStatus').textContent = '\u2713 ' + fmt(records.length) + ' records';
+    document.getElementById('bulkStatus').className = 'upload-btn-status ok';
+    document.getElementById('bulkUploadBlock').classList.add('loaded');
+    showToast('Bulk Liquid loaded: ' + fmt(records.length) + ' records');
+    activatePortal();
+  });
+});
+
+document.getElementById('depakUpload').addEventListener('change', function(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  document.getElementById('depakStatus').textContent = 'Parsing…';
+  parseDePak(file, function(records, err){
+    if(err){
+      document.getElementById('depakStatus').textContent = err;
+      document.getElementById('depakStatus').style.color = 'var(--neg)';
+      return;
+    }
+    STATE.depakData = records;
+    document.getElementById('depakStatus').textContent = '\u2713 ' + fmt(records.length) + ' records';
+    document.getElementById('depakStatus').className = 'upload-btn-status ok';
+    document.getElementById('depakUploadBlock').classList.add('loaded');
+    showToast('DePak loaded: ' + fmt(records.length) + ' records');
+    activatePortal();
+  });
+});
+
+document.getElementById('replaceBtn').addEventListener('click', function(){
+  document.getElementById('uploadScreen').style.display = 'flex';
+  document.getElementById('mainContent').style.display = 'none';
+  document.getElementById('filterBar').style.display = 'none';
+  document.getElementById('tabNav').style.display = 'none';
+  document.getElementById('sectionTabs').style.display = 'none';
+  document.getElementById('bulkUpload').value = '';
+  document.getElementById('depakUpload').value = '';
+});
+
+// =============================================================
+// PORTAL ACTIVATION
+// =============================================================
+function activatePortal(){
+  if(!STATE.bulkData && !STATE.depakData) return;
+  if(STATE.bulkData) STATE.activeTab = 'bulk';
+  else STATE.activeTab = 'depak';
+
+  document.getElementById('uploadScreen').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'block';
+  document.getElementById('filterBar').style.display = 'flex';
+  document.getElementById('tabNav').style.display = 'flex';
+  document.getElementById('sectionTabs').style.display = 'flex';
+
+  setupFilters();
+  setupTabs();
+  refreshTabState();
+}
+
+// =============================================================
+// FILTERS
+// =============================================================
+function setupFilters(){
+  document.querySelectorAll('#periodBtns button').forEach(function(b){
+    b.onclick = function(){
+      document.querySelectorAll('#periodBtns button').forEach(function(x){x.classList.remove('active')});
+      b.classList.add('active');
+      STATE.filters.period = b.dataset.period;
+      updateFilterUI();
+      render();
+    };
+  });
+  document.getElementById('customerSel').onchange = function(){
+    STATE.filters.customer = this.value;
+    render();
+  };
+  document.getElementById('monthSel').onchange = function(){
+    STATE.filters.month = parseInt(this.value);
+    render();
+  };
+  document.getElementById('yearSel').onchange = function(){
+    STATE.filters.year = parseInt(this.value);
+    render();
+  };
+  document.getElementById('startDate').onchange = function(){
+    STATE.filters.startDate = this.value ? new Date(this.value+'T00:00:00') : null;
+    render();
+  };
+  document.getElementById('endDate').onchange = function(){
+    STATE.filters.endDate = this.value ? new Date(this.value+'T23:59:59') : null;
+    render();
+  };
+  document.getElementById('generateBtn').onclick = generatePDF;
+}
+
+function updateFilterUI(){
+  var p = STATE.filters.period;
+  document.getElementById('monthYearGrp').style.display = (p==='month'||p==='quarter'||p==='annual') ? 'flex' : 'none';
+  document.getElementById('customRangeGrp').style.display = (p==='custom') ? 'flex' : 'none';
+  var rangeLabel = document.getElementById('rangeLabel');
+  if(p==='quarter') rangeLabel.textContent = 'Quarter';
+  else if(p==='annual') rangeLabel.textContent = 'Year';
+  else rangeLabel.textContent = 'Range';
+  document.getElementById('monthSel').style.display = (p==='annual') ? 'none' : '';
+}
+
+function populateFilters(){
+  var data = currentData();
+  if(!data || !data.length) return;
+  var custSel = document.getElementById('customerSel');
+  var nameField = STATE.activeTab==='bulk' ? 'vendor' : 'customer';
+  document.getElementById('custLabel').textContent = STATE.activeTab==='bulk' ? 'Vendor' : 'Customer';
+
+  var customers = Array.from(new Set(data.map(function(r){return r[nameField]}))).sort();
+  custSel.innerHTML = '';
+
+  var optAll = document.createElement('option');
+  optAll.value = 'ALL';
+  optAll.textContent = 'VIRESCO Plant-Wide (' + (STATE.activeTab==='bulk'?'all vendors':'all customers') + ')';
+  custSel.appendChild(optAll);
+
+  customers.forEach(function(c){
+    var opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c + (STATE.activeTab==='bulk' && c==='DePak' ? '  (Internal)' : '');
+    custSel.appendChild(opt);
+  });
+
+  if(!Array.from(custSel.options).map(function(o){return o.value}).includes(STATE.filters.customer)){
+    STATE.filters.customer = 'ALL';
+  }
+  custSel.value = STATE.filters.customer;
+
+  var monthSel = document.getElementById('monthSel');
+  monthSel.innerHTML = '';
+  for(var m=0; m<12; m++){
+    var o = document.createElement('option');
+    o.value = m;
+    o.textContent = STATE.filters.period==='quarter' ? ('Q'+(Math.floor(m/3)+1)) : monthName(m);
+    monthSel.appendChild(o);
+  }
+  if(STATE.filters.period==='quarter'){
+    // Only show 4 quarter options
+    monthSel.innerHTML = '';
+    for(var q=0; q<4; q++){
+      var o = document.createElement('option');
+      o.value = q*3;
+      o.textContent = 'Q'+(q+1);
+      monthSel.appendChild(o);
+    }
+  }
+
+  var years = Array.from(new Set(data.map(function(r){return r.date.getFullYear()}))).sort();
+  var yearSel = document.getElementById('yearSel');
+  yearSel.innerHTML = '';
+  years.forEach(function(y){
+    var o = document.createElement('option');
+    o.value = y;
+    o.textContent = y;
+    yearSel.appendChild(o);
+  });
+
+  if(STATE.filters.month === null || STATE.filters.year === null){
+    var latest = data.reduce(function(a,b){return a.date>b.date?a:b}).date;
+    STATE.filters.month = latest.getMonth();
+    STATE.filters.year = latest.getFullYear();
+  }
+  monthSel.value = STATE.filters.period==='quarter' ? Math.floor(STATE.filters.month/3)*3 : STATE.filters.month;
+  yearSel.value = STATE.filters.year;
+
+  if(!STATE.filters.startDate){
+    var minDate = data.reduce(function(a,b){return a.date<b.date?a:b}).date;
+    STATE.filters.startDate = minDate;
+    document.getElementById('startDate').valueAsDate = minDate;
+  }
+  if(!STATE.filters.endDate){
+    var maxDate = data.reduce(function(a,b){return a.date>b.date?a:b}).date;
+    STATE.filters.endDate = maxDate;
+    document.getElementById('endDate').valueAsDate = maxDate;
+  }
+}
+
+// =============================================================
+// TABS
+// =============================================================
+function setupTabs(){
+  document.querySelectorAll('#tabNav button').forEach(function(b){
+    b.onclick = function(){
+      var tab = b.dataset.tab;
+      if((tab==='bulk' && !STATE.bulkData) || (tab==='depak' && !STATE.depakData)){
+        showToast('No data loaded for ' + (tab==='bulk'?'Bulk Liquid':'DePak'), true);
+        return;
+      }
+      document.querySelectorAll('#tabNav button').forEach(function(x){x.classList.remove('active')});
+      b.classList.add('active');
+      STATE.activeTab = tab;
+      STATE.filters.customer = 'ALL';
+      refreshTabState();
+    };
+  });
+  document.querySelectorAll('#sectionTabs button').forEach(function(b){
+    b.onclick = function(){
+      document.querySelectorAll('#sectionTabs button').forEach(function(x){x.classList.remove('active')});
+      b.classList.add('active');
+      STATE.activeSection = b.dataset.sec;
+      document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});
+      document.getElementById('sec-'+STATE.activeSection).classList.add('active');
+      setTimeout(render, 50);
+    };
+  });
+}
+
+function refreshTabState(){
+  if(STATE.activeTab==='bulk' && !STATE.bulkData) STATE.activeTab = 'depak';
+  if(STATE.activeTab==='depak' && !STATE.depakData) STATE.activeTab = 'bulk';
+  document.querySelectorAll('#tabNav button').forEach(function(b){
+    b.classList.toggle('active', b.dataset.tab===STATE.activeTab);
+  });
+  populateFilters();
+  updateFilterUI();
+  render();
+}
+
+function currentData(){
+  return STATE.activeTab==='bulk' ? STATE.bulkData : STATE.depakData;
+}
+
+// =============================================================
+// DATE RANGE LOGIC
+// =============================================================
+function getDateRange(){
+  var p = STATE.filters.period;
+  var y = STATE.filters.year, m = STATE.filters.month;
+  if(p==='month'){
+    return {
+      start: new Date(y, m, 1),
+      end: new Date(y, m+1, 0, 23, 59, 59),
+      label: monthName(m)+' 1, '+y+' \u2014 '+monthName(m)+' '+new Date(y,m+1,0).getDate()+', '+y,
+      shortLabel: monthName(m)+' '+y,
+      compact: monthShort(m)+' '+y
+    };
+  }
+  if(p==='quarter'){
+    var q = Math.floor(m/3);
+    var qStart = q*3, qEnd = qStart+2;
+    return {
+      start: new Date(y, qStart, 1),
+      end: new Date(y, qEnd+1, 0, 23, 59, 59),
+      label: 'Q'+(q+1)+' '+y+' ('+monthShort(qStart)+' 1 \u2014 '+monthShort(qEnd)+' '+new Date(y,qEnd+1,0).getDate()+', '+y+')',
+      shortLabel: 'Q'+(q+1)+' '+y,
+      compact: 'Q'+(q+1)+' '+y
+    };
+  }
+  if(p==='ytd'){
+    var now = new Date();
+    return {
+      start: new Date(now.getFullYear(), 0, 1),
+      end: now,
+      label: 'Year-to-Date '+now.getFullYear()+' (Jan 1 \u2014 '+fmtDate(now)+')',
+      shortLabel: 'YTD '+now.getFullYear(),
+      compact: 'YTD '+now.getFullYear()
+    };
+  }
+  if(p==='annual'){
+    return {
+      start: new Date(y, 0, 1),
+      end: new Date(y, 11, 31, 23, 59, 59),
+      label: 'Annual '+y+' (Jan 1 \u2014 Dec 31, '+y+')',
+      shortLabel: y+' Annual',
+      compact: y
+    };
+  }
+  if(p==='custom'){
+    var s = STATE.filters.startDate, e = STATE.filters.endDate;
+    return {
+      start: s, end: e,
+      label: fmtDate(s)+' \u2014 '+fmtDate(e),
+      shortLabel: fmtDateShort(s)+' to '+fmtDateShort(e),
+      compact: fmtDateShort(s)+'\u2013'+fmtDateShort(e)
+    };
+  }
+}
+
+// Get the prior comparable period
+function getPriorRange(){
+  var p = STATE.filters.period;
+  var y = STATE.filters.year, m = STATE.filters.month;
+  if(p==='month'){
+    var pm = m-1, py = y;
+    if(pm < 0){ pm = 11; py = y-1; }
+    return {
+      start: new Date(py, pm, 1),
+      end: new Date(py, pm+1, 0, 23, 59, 59),
+      label: monthShort(pm)+' '+py
+    };
+  }
+  if(p==='quarter'){
+    var q = Math.floor(m/3);
+    var pq = q-1, py = y;
+    if(pq < 0){ pq = 3; py = y-1; }
+    return {
+      start: new Date(py, pq*3, 1),
+      end: new Date(py, pq*3+3, 0, 23, 59, 59),
+      label: 'Q'+(pq+1)+' '+py
+    };
+  }
+  if(p==='ytd'){
+    // Compare to same period last year
+    var now = new Date();
+    var py = now.getFullYear()-1;
+    return {
+      start: new Date(py, 0, 1),
+      end: new Date(py, now.getMonth(), now.getDate(), 23, 59, 59),
+      label: 'YTD '+py
+    };
+  }
+  if(p==='annual'){
+    return {
+      start: new Date(y-1, 0, 1),
+      end: new Date(y-1, 11, 31, 23, 59, 59),
+      label: (y-1)+''
+    };
+  }
+  if(p==='custom'){
+    var s = STATE.filters.startDate, e = STATE.filters.endDate;
+    if(!s || !e) return null;
+    var diffMs = e - s;
+    var priorEnd = new Date(s.getTime() - 1);
+    var priorStart = new Date(priorEnd.getTime() - diffMs);
+    return {
+      start: priorStart,
+      end: priorEnd,
+      label: 'prior period'
+    };
+  }
+}
+
+function filterByRange(records, start, end, customer){
+  var nameField = STATE.activeTab==='bulk' ? 'vendor' : 'customer';
+  return records.filter(function(r){
+    if(r.date < start || r.date > end) return false;
+    if(customer && customer !== 'ALL'){
+      if(r[nameField] !== customer) return false;
+    }
+    return true;
+  });
+}
+
+function filteredData(){
+  var range = getDateRange();
+  return filterByRange(currentData()||[], range.start, range.end, STATE.filters.customer);
+}
+
+function priorData(){
+  var prior = getPriorRange();
+  if(!prior) return [];
+  return filterByRange(currentData()||[], prior.start, prior.end, STATE.filters.customer);
+}
+
+// =============================================================
+// SPARKLINE GENERATION
+// =============================================================
+function generateSparkData(records, valueField, range){
+  // Bucket by day, return array of values (one per day in range, zero-padded)
+  var dayMs = 86400000;
+  var startMs = new Date(range.start.getFullYear(), range.start.getMonth(), range.start.getDate()).getTime();
+  var endMs = new Date(range.end.getFullYear(), range.end.getMonth(), range.end.getDate()).getTime();
+  var nDays = Math.floor((endMs - startMs)/dayMs) + 1;
+  if(nDays > 90){
+    // Too many days — bucket by week
+    nDays = Math.ceil(nDays/7);
+    var bucketMs = 7*dayMs;
+  } else {
+    var bucketMs = dayMs;
+  }
+  var buckets = new Array(nDays).fill(0);
+  records.forEach(function(r){
+    var idx = Math.floor((r.date.getTime() - startMs)/bucketMs);
+    if(idx >= 0 && idx < nDays){
+      buckets[idx] += r[valueField] || 0;
+    }
+  });
+  return buckets;
+}
+
+function renderSparkline(data, color){
+  if(!data || !data.length) return '';
+  var max = Math.max.apply(null, data);
+  if(max === 0) max = 1;
+  var w = 100, h = 22;
+  var n = data.length;
+  var pts = data.map(function(v, i){
+    var x = (i/(n-1)) * w;
+    var y = h - 2 - (v/max) * (h-4);
+    return x.toFixed(1)+','+y.toFixed(1);
+  });
+  var line = pts.join(' ');
+  var fill = '0,'+h+' '+line+' '+w+','+h;
+  return '<svg class="kpi-spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">' +
+    '<polygon points="'+fill+'" fill="'+color+'" fill-opacity="0.12"/>' +
+    '<polyline points="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.2"/>' +
+    '</svg>';
+}
+
+// =============================================================
+// RENDER
+// =============================================================
+function render(){
+  populateFilters();
+  var records = filteredData();
+  var summary = calc(records, STATE.activeTab);
+  var prior = priorData();
+  var priorSummary = calc(prior, STATE.activeTab);
+  var range = getDateRange();
+  var priorRange = getPriorRange();
+
+  document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});
+  document.getElementById('sec-'+STATE.activeSection).classList.add('active');
+
+  if(STATE.activeSection === 'overview') renderOverview(records, summary, prior, priorSummary, range, priorRange);
+  if(STATE.activeSection === 'sustain') renderSustainability(records, summary, prior, priorSummary, range, priorRange);
+  if(STATE.activeSection === 'ops') renderOps(records, summary, prior, priorSummary, range, priorRange);
+  if(STATE.activeSection === 'rankings') renderRankings(range);
+  if(STATE.activeSection === 'log') renderLog(records, range);
+}
+
+// ----- KPI helper -----
+function buildKpi(label, value, unit, curr, prior, priorLabel, sparkData, color){
+  var delta = fmtDelta(curr, prior);
+  var spark = sparkData ? renderSparkline(sparkData, color || VC.green700) : '';
+  return '<div class="kpi-card">' +
+    '<div class="kpi-label">'+label+'</div>' +
+    '<div><span class="kpi-value">'+value+'</span>' + (unit?'<span class="kpi-unit">'+unit+'</span>':'') + '</div>' +
+    '<div class="kpi-meta">' +
+      '<span class="'+delta.cls+'">'+delta.text+'</span>' +
+      '<span class="kpi-vs">vs '+priorLabel+'</span>' +
+    '</div>' +
+    spark +
+    '</div>';
+}
+
+// =============================================================
+// OVERVIEW
+// =============================================================
+function renderOverview(records, s, prior, ps, range, priorRange){
+  var tab = STATE.activeTab;
+  var html = '';
+  var pl = priorRange ? priorRange.label : 'prior';
+
+  if(tab==='bulk'){
+    var sparkGal = generateSparkData(records, 'gallons', range);
+    html += buildKpi('Gallons', fmtCompact(s.gallons), '', s.gallons, ps.gallons, pl, sparkGal, VC.green500);
+    html += buildKpi('Tons CO\u2082e Avoided', fmt(s.ghg, 1), '', s.ghg, ps.ghg, pl, sparkGal, VC.green700);
+    html += buildKpi('MMBtu Output', fmtCompact(s.mmbtu), '', s.mmbtu, ps.mmbtu, pl, sparkGal, VC.green700);
+    html += buildKpi('kWh Equivalent', fmtCompact(s.kwh), '', s.kwh, ps.kwh, pl, sparkGal, VC.green700);
+    html += buildKpi('Loads', fmt(s.loads), '', s.loads, ps.loads, pl, generateSparkData(records, 'gallons', range).map(function(v){return v>0?1:0}), VC.ink300);
+  } else {
+    var sparkTons = generateSparkData(records, 'tons', range);
+    html += buildKpi('Tons Processed', fmt(s.tons, 1), '', s.tons, ps.tons, pl, sparkTons, VC.green500);
+    html += buildKpi('Tons CO\u2082e Avoided', fmt(s.ghg, 1), '', s.ghg, ps.ghg, pl, sparkTons, VC.green700);
+    html += buildKpi('MMBtu Output', fmtCompact(s.mmbtu), '', s.mmbtu, ps.mmbtu, pl, sparkTons, VC.green700);
+    html += buildKpi('kWh Equivalent', fmtCompact(s.kwh), '', s.kwh, ps.kwh, pl, sparkTons, VC.green700);
+    html += buildKpi('Loads', fmt(s.loads), '', s.loads, ps.loads, pl, sparkTons.map(function(v){return v>0?1:0}), VC.ink300);
+  }
+  document.getElementById('overviewKpis').innerHTML = html;
+
+  // Daily volume chart
+  document.getElementById('dailyChartTitle').textContent = (tab==='bulk' ? 'Daily Volume' : 'Daily Tons') + ' \u2014 ' + (STATE.filters.customer==='ALL'?'Plant-Wide':STATE.filters.customer);
+  document.getElementById('dailyChartMeta').textContent = range.label;
+  document.getElementById('dailyChartSub').textContent = (tab==='bulk' ? 'Gallons received per day' : 'Tons processed per day');
+
+  var byDay = {};
+  records.forEach(function(r){
+    var k = r.date.toISOString().split('T')[0];
+    if(!byDay[k]) byDay[k] = 0;
+    byDay[k] += tab==='bulk' ? r.gallons : r.tons;
+  });
+  // Fill in zero days
+  var allDays = [];
+  var d = new Date(range.start.getFullYear(), range.start.getMonth(), range.start.getDate());
+  var endD = new Date(range.end.getFullYear(), range.end.getMonth(), range.end.getDate());
+  while(d <= endD){
+    var k = d.toISOString().split('T')[0];
+    allDays.push({key:k, val:byDay[k]||0});
+    d.setDate(d.getDate()+1);
+    if(allDays.length > 400) break;
+  }
+
+  destroyChart('chartDaily');
+  if(allDays.length){
+    STATE.charts.chartDaily = new Chart(document.getElementById('chartDaily'),{
+      type:'line',
+      data:{
+        labels: allDays.map(function(x){return new Date(x.key+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}),
+        datasets:[{
+          label: tab==='bulk' ? 'Gallons' : 'Tons',
+          data: allDays.map(function(x){return x.val}),
+          borderColor: VC.green700,
+          backgroundColor: 'rgba(113,204,152,0.18)',
+          fill:true,
+          tension:0.3,
+          pointRadius:0,
+          pointHoverRadius:4,
+          borderWidth:1.8
+        }]
+      },
+      options: chartOptsLine()
+    });
+  }
+
+  // Distribution / breakdown card
+  if(tab==='bulk'){
+    document.getElementById('distTitle').textContent = 'Strength & Tank Routing';
+    var byStrength = {};
+    records.forEach(function(r){
+      var k = r.strength || '(none)';
+      byStrength[k] = (byStrength[k]||0) + r.gallons;
+    });
+    var byTank = {};
+    records.forEach(function(r){
+      var k = r.tank || '(unset)';
+      byTank[k] = (byTank[k]||0) + r.gallons;
+    });
+    var sTot = s.gallons || 1;
+    var sArr = Object.entries(byStrength).sort(function(a,b){return b[1]-a[1]});
+    var tArr = Object.entries(byTank).sort(function(a,b){return b[1]-a[1]});
+    var sLabel = {LS:'Low strength',HS:'High strength',L:'Liquid','(none)':'Unspecified'};
+    var distHtml = '<table class="dt"><thead><tr><th>Strength</th><th class="num-th">Gallons</th><th class="num-th">% of total</th></tr></thead><tbody>';
+    sArr.forEach(function(p, i){
+      var pct = (p[1]/sTot)*100;
+      var fillCls = i===0 ? 'bar-fill' : i===1 ? 'bar-fill bar-fill-mid' : 'bar-fill bar-fill-light';
+      distHtml += '<tr><td>'+(sLabel[p[0]]||p[0])+'</td><td class="num">'+fmt(p[1],0)+'</td><td class="num"><span class="bar-cell"><span class="bar-track"><span class="'+fillCls+'" style="width:'+Math.max(2,pct).toFixed(0)+'%"></span></span>'+fmt(pct,0)+'%</span></td></tr>';
+    });
+    distHtml += '</tbody></table><div style="height:1px;background:var(--line-300);margin:12px 0"></div>';
+    distHtml += '<table class="dt"><thead><tr><th>Tank</th><th class="num-th">Gallons</th><th class="num-th">% of total</th></tr></thead><tbody>';
+    tArr.forEach(function(p, i){
+      var pct = (p[1]/sTot)*100;
+      var fillCls = i===0 ? 'bar-fill' : 'bar-fill bar-fill-light';
+      distHtml += '<tr><td>Tank '+p[0]+'</td><td class="num">'+fmt(p[1],0)+'</td><td class="num"><span class="bar-cell"><span class="bar-track"><span class="'+fillCls+'" style="width:'+Math.max(2,pct).toFixed(0)+'%"></span></span>'+fmt(pct,0)+'%</span></td></tr>';
+    });
+    distHtml += '</tbody></table>';
+    document.getElementById('distContent').innerHTML = distHtml;
+  } else {
+    document.getElementById('distTitle').textContent = 'Container & Product Mix';
+    var byUnits = {};
+    records.forEach(function(r){
+      var k = r.units || '(unset)';
+      byUnits[k] = (byUnits[k]||0) + r.tons;
+    });
+    var byProd = {};
+    records.forEach(function(r){
+      byProd[r.product || '(unset)'] = (byProd[r.product || '(unset)'] || 0) + r.tons;
+    });
+    var sTot = s.tons || 1;
+    var uArr = Object.entries(byUnits).sort(function(a,b){return b[1]-a[1]}).slice(0,5);
+    var pArr = Object.entries(byProd).sort(function(a,b){return b[1]-a[1]}).slice(0,5);
+    var distHtml = '<table class="dt"><thead><tr><th>Container</th><th class="num-th">Tons</th><th class="num-th">% of total</th></tr></thead><tbody>';
+    uArr.forEach(function(p, i){
+      var pct = (p[1]/sTot)*100;
+      var fillCls = i===0 ? 'bar-fill' : i===1 ? 'bar-fill bar-fill-mid' : 'bar-fill bar-fill-light';
+      var disp = p[0].length > 22 ? p[0].substring(0,20)+'\u2026' : p[0];
+      distHtml += '<tr><td title="'+p[0]+'">'+disp+'</td><td class="num">'+fmt(p[1],1)+'</td><td class="num"><span class="bar-cell"><span class="bar-track"><span class="'+fillCls+'" style="width:'+Math.max(2,pct).toFixed(0)+'%"></span></span>'+fmt(pct,0)+'%</span></td></tr>';
+    });
+    distHtml += '</tbody></table><div style="height:1px;background:var(--line-300);margin:12px 0"></div>';
+    distHtml += '<table class="dt"><thead><tr><th>Top Products</th><th class="num-th">Tons</th></tr></thead><tbody>';
+    pArr.forEach(function(p){
+      var disp = p[0].length > 28 ? p[0].substring(0,26)+'\u2026' : p[0];
+      distHtml += '<tr><td title="'+p[0]+'">'+disp+'</td><td class="num">'+fmt(p[1],1)+'</td></tr>';
+    });
+    distHtml += '</tbody></table>';
+    document.getElementById('distContent').innerHTML = distHtml;
+  }
+
+  // Monthly trend (last 12 months from current data)
+  var allRecords = currentData() || [];
+  var byMo = {};
+  allRecords.forEach(function(r){
+    if(STATE.filters.customer !== 'ALL' && r[tab==='bulk'?'vendor':'customer'] !== STATE.filters.customer) return;
+    var k = r.date.getFullYear()+'-'+String(r.date.getMonth()+1).padStart(2,'0');
+    byMo[k] = (byMo[k]||0) + (tab==='bulk' ? r.gallons : r.tons);
+  });
+  var mKeys = Object.keys(byMo).sort().slice(-12);
+  destroyChart('chartMonthly');
+  if(mKeys.length){
+    STATE.charts.chartMonthly = new Chart(document.getElementById('chartMonthly'),{
+      type:'bar',
+      data:{
+        labels: mKeys.map(function(k){var p=k.split('-');return monthShort(parseInt(p[1])-1)+' '+p[0].slice(2)}),
+        datasets:[{
+          label: tab==='bulk' ? 'Gallons' : 'Tons',
+          data: mKeys.map(function(k){return byMo[k]}),
+          backgroundColor: VC.green500,
+          borderColor: VC.green700,
+          borderWidth:0,
+          borderRadius:2,
+          maxBarThickness:32
+        }]
+      },
+      options: chartOptsBar()
+    });
+  }
+
+  // Operational summary table
+  document.getElementById('opsSummaryMeta').textContent = range.compact;
+  var notes = [];
+  notes.push(['Reporting period', range.label]);
+  notes.push([(tab==='bulk'?'Vendor':'Customer'), STATE.filters.customer==='ALL'?'VIRESCO Plant-Wide':STATE.filters.customer]);
+  notes.push(['Total ' + (tab==='bulk'?'loads':'deliveries'), fmt(s.loads)]);
+  if(tab==='bulk'){
+    notes.push(['Average load size', fmt(s.gallons/(s.loads||1), 0) + ' gal']);
+    var maxLoad = records.reduce(function(a,b){return a.gallons>b.gallons?a:b}, {gallons:0});
+    if(maxLoad.gallons) notes.push(['Largest load', fmt(maxLoad.gallons, 0)+' gal ('+fmtDate(maxLoad.date)+')']);
+  } else {
+    notes.push(['Average load size', fmt(s.tons/(s.loads||1), 2) + ' tons']);
+    var maxLoad = records.reduce(function(a,b){return a.tons>b.tons?a:b}, {tons:0});
+    if(maxLoad.tons) notes.push(['Largest load', fmt(maxLoad.tons, 2)+' tons ('+fmtDate(maxLoad.date)+')']);
+  }
+  // Peak day
+  var byDayPeak = {};
+  records.forEach(function(r){
+    var k = r.date.toISOString().split('T')[0];
+    byDayPeak[k] = (byDayPeak[k]||0) + (tab==='bulk'?r.gallons:r.tons);
+  });
+  if(Object.keys(byDayPeak).length){
+    var pk = Object.keys(byDayPeak).reduce(function(a,b){return byDayPeak[a]>byDayPeak[b]?a:b});
+    notes.push(['Peak day', fmtDate(new Date(pk+'T12:00:00'))+' ('+(tab==='bulk'?fmt(byDayPeak[pk],0)+' gal':fmt(byDayPeak[pk],2)+' tons')+')']);
+  }
+  // Active days
+  var uniqueDays = new Set(records.map(function(r){return r.date.toISOString().split('T')[0]})).size;
+  var totalDays = Math.ceil((range.end - range.start) / 86400000);
+  notes.push(['Active days', uniqueDays + ' of ' + totalDays]);
+
+  var notesHtml = '<thead><tr><th>Metric</th><th class="num-th">Value</th></tr></thead><tbody>';
+  notes.forEach(function(n){
+    notesHtml += '<tr><td style="color:var(--ink-300)">'+n[0]+'</td><td class="num">'+n[1]+'</td></tr>';
+  });
+  notesHtml += '</tbody>';
+  document.getElementById('opsSummaryTable').innerHTML = notesHtml;
+}
+
+// =============================================================
+// SUSTAINABILITY
+// =============================================================
+function renderSustainability(records, s, prior, ps, range, priorRange){
+  var tab = STATE.activeTab;
+  var pl = priorRange ? priorRange.label : 'prior';
+  var sparkVal = generateSparkData(records, tab==='bulk'?'gallons':'tons', range);
+
+  var html = '';
+  html += buildKpi('Tons CO\u2082e Avoided', fmt(s.ghg, 1), '', s.ghg, ps.ghg, pl, sparkVal, VC.green700);
+  html += buildKpi('Cars Off Road', fmt(s.cars, 0), '/mo', s.cars, ps.cars, pl, sparkVal, VC.green500);
+  html += buildKpi('Tree-Years', fmt(s.trees, 0), '', s.trees, ps.trees, pl, sparkVal, VC.green500);
+  html += buildKpi('Households', fmt(s.households, 1), '/mo', s.households, ps.households, pl, sparkVal, VC.green700);
+  if(tab==='bulk'){
+    html += buildKpi('ReNutrient\u00AE', fmtCompact(s.digestate_gal), 'gal', s.digestate_gal, ps.digestate_gal, pl, sparkVal, VC.yellow500);
+  } else {
+    html += buildKpi('ReNutrient\u00AE NPK', fmtCompact(s.npk), 'kg', s.npk, ps.npk, pl, sparkVal, VC.yellow500);
+  }
+  document.getElementById('susKpis').innerHTML = html;
+
+  // Equivalent table
+  var equivRows = [
+    ['Cars off road (1 month)', fmt(s.cars, 0)],
+    ['Tree-years sequestered', fmt(s.trees, 0)],
+    ['Households powered (1 month)', fmt(s.households, 1)],
+    ['Vehicle miles avoided', fmt(s.miles, 0)]
+  ];
+  var equivHtml = '<thead><tr><th>Equivalent</th><th class="num-th">Value</th></tr></thead><tbody>';
+  equivRows.forEach(function(r){
+    equivHtml += '<tr><td style="color:var(--ink-300)">'+r[0]+'</td><td class="num" style="font-weight:500">'+r[1]+'</td></tr>';
+  });
+  equivHtml += '</tbody>';
+  document.getElementById('equivTable').innerHTML = equivHtml;
+
+  // Detail table
+  document.getElementById('susSubTitle').textContent = (STATE.filters.customer==='ALL'?'VIRESCO Plant-Wide':STATE.filters.customer) + ' \u2014 ' + range.label;
+  var rows = [];
+  rows.push(['GHG emissions avoided', fmt(s.ghg, 1) + ' Tons CO\u2082e', 'CARB ANDOC framework, GWP-28']);
+  if(tab==='bulk'){
+    rows.push(['Carbon processed', fmt(s.lbsCarbon, 0) + ' lbs', '@ 20,000 ppm carbon content']);
+    rows.push(['Biogas yield', fmt(s.scfBiogas, 0) + ' SCF CH\u2084', '23 SCF/lb C  \u00B7  ' + fmt(s.m3Biogas, 0) + ' m\u00B3']);
+  } else {
+    rows.push(['Biogas yield', fmt(s.m3Biogas, 0) + ' m\u00B3 CH\u2084', '100 m\u00B3/ton  \u00D7  73% digester eff.']);
+    rows.push(['SCF equivalent', fmt(s.scfBiogas, 0) + ' SCF', '35.31 SCF per m\u00B3']);
+  }
+  rows.push(['MMBtu output', fmt(s.mmbtu, 0) + ' MMBtu', '1 SCF CH\u2084 = 1,037 BTU']);
+  rows.push(['Electricity', fmt(s.kwh, 0) + ' kWh', '40% biogas-to-energy efficiency']);
+  rows.push(['Households powered', fmt(s.households, 1) + ' /month', '893 kWh/month avg US household']);
+  rows.push(['Cars off road', fmt(s.cars, 0) + ' /month', '0.383 Tons CO\u2082/car/month (EPA)']);
+  rows.push(['Tree-years', fmt(s.trees, 0), '0.06 Tons CO\u2082e per tree-year']);
+  rows.push(['Vehicle miles avoided', fmt(s.miles, 0), '2,481 miles per Ton CO\u2082e (EPA)']);
+  if(tab==='bulk'){
+    rows.push(['ReNutrient\u00AE digestate', fmt(s.digestate_gal, 0) + ' gal', '~95% of intake recovered']);
+  } else {
+    rows.push(['ReNutrient\u00AE NPK', fmt(s.npk, 0) + ' kg', '15 kg NPK per ton (digestate)']);
+  }
+  var sHtml = '<thead><tr><th>Metric</th><th class="num-th">Value</th><th>Source / Method</th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    sHtml += '<tr><td>'+r[0]+'</td><td class="num" style="font-weight:500">'+r[1]+'</td><td style="color:var(--ink-300);font-size:11px">'+r[2]+'</td></tr>';
+  });
+  sHtml += '</tbody>';
+  document.getElementById('susTable').innerHTML = sHtml;
+
+  // Methodology
+  var method = '';
+  if(tab==='bulk'){
+    method = '<strong>Methodology.</strong> GHG calculated as gallons \u00D7 8.34 lbs/gal \u00F7 2,000 \u00D7 0.62 Tons CO\u2082e/ton (CARB ANDOC framework: 86.5% ANDOC, 75% LFG capture, GWP-28). Biogas and energy derived from carbon content (20,000 ppm) at 23 SCF CH\u2084/lb carbon and 1.34 kWh/lb carbon (40% genset efficiency baked in).';
+  } else {
+    method = '<strong>Methodology.</strong> GHG calculated as tons \u00D7 0.62 Tons CO\u2082e/ton (CARB ANDOC). Biogas: 100 m\u00B3/ton \u00D7 73% digester efficiency = 73 m\u00B3 CH\u2084/ton. Energy: m\u00B3 \u00D7 4 kWh/m\u00B3 (40% genset). NPK: 15 kg/ton (ReNutrient\u00AE).';
+  }
+  document.getElementById('susMethod').innerHTML = method;
+
+  // Energy & GHG monthly chart
+  var allRecs = currentData() || [];
+  var monthlyData = {};
+  allRecs.forEach(function(r){
+    if(STATE.filters.customer !== 'ALL' && r[tab==='bulk'?'vendor':'customer'] !== STATE.filters.customer) return;
+    var k = r.date.getFullYear()+'-'+String(r.date.getMonth()+1).padStart(2,'0');
+    if(!monthlyData[k]) monthlyData[k] = {ghg:0, mmbtu:0};
+    var sub = calc([r], tab);
+    monthlyData[k].ghg += sub.ghg;
+    monthlyData[k].mmbtu += sub.mmbtu;
+  });
+  var mK = Object.keys(monthlyData).sort().slice(-12);
+  destroyChart('chartEnergyGhg');
+  if(mK.length){
+    STATE.charts.chartEnergyGhg = new Chart(document.getElementById('chartEnergyGhg'), {
+      data:{
+        labels: mK.map(function(k){var p=k.split('-');return monthShort(parseInt(p[1])-1)+' '+p[0].slice(2)}),
+        datasets:[
+          {type:'bar', label:'Tons CO\u2082e', data:mK.map(function(k){return monthlyData[k].ghg}), backgroundColor:VC.green500, borderRadius:2, maxBarThickness:28, yAxisID:'y'},
+          {type:'line', label:'MMBtu', data:mK.map(function(k){return monthlyData[k].mmbtu}), borderColor:VC.yellow500, backgroundColor:VC.yellow500, borderWidth:1.8, pointRadius:3, pointBackgroundColor:VC.yellow500, fill:false, tension:0.3, yAxisID:'y2'}
+        ]
+      },
+      options: chartOptsCombo()
+    });
+  }
+}
+
+// =============================================================
+// OPERATIONS
+// =============================================================
+function renderOps(records, s, prior, ps, range, priorRange){
+  var tab = STATE.activeTab;
+  var pl = priorRange ? priorRange.label : 'prior';
+  var uniqueDays = new Set(records.map(function(r){return r.date.toISOString().split('T')[0]})).size;
+  var priorUniqueDays = new Set(prior.map(function(r){return r.date.toISOString().split('T')[0]})).size;
+  var totalDays = Math.ceil((range.end - range.start) / 86400000);
+
+  var sparkVal = generateSparkData(records, tab==='bulk'?'gallons':'tons', range);
+
+  var html = '';
+  html += buildKpi('Active Days', uniqueDays + '/' + totalDays, '', uniqueDays, priorUniqueDays, pl, null);
+
+  if(tab==='bulk'){
+    var maxLoad = records.reduce(function(a,b){return a.gallons>b.gallons?a:b}, {gallons:0});
+    var priorMax = prior.reduce(function(a,b){return a.gallons>b.gallons?a:b}, {gallons:0});
+    html += buildKpi('Largest Load', fmtCompact(maxLoad.gallons), 'gal', maxLoad.gallons, priorMax.gallons, pl, sparkVal, VC.green700);
+    var dailyAvg = s.gallons / (uniqueDays||1);
+    var priorAvg = ps.gallons / (priorUniqueDays||1);
+    html += buildKpi('Daily Average', fmt(dailyAvg, 0), 'gal', dailyAvg, priorAvg, pl, sparkVal, VC.green500);
+    var avgLoad = s.gallons / (s.loads||1);
+    var priorAvgLoad = ps.gallons / (ps.loads||1);
+    html += buildKpi('Avg Load Size', fmt(avgLoad, 0), 'gal', avgLoad, priorAvgLoad, pl, null);
+    var byDayPeak = {};
+    records.forEach(function(r){
+      var k = r.date.toISOString().split('T')[0];
+      byDayPeak[k] = (byDayPeak[k]||0)+r.gallons;
+    });
+    var peak = Object.values(byDayPeak).reduce(function(a,b){return Math.max(a,b)}, 0);
+    var priorPeak = (function(){
+      var bd = {};
+      prior.forEach(function(r){
+        var k = r.date.toISOString().split('T')[0];
+        bd[k] = (bd[k]||0)+r.gallons;
+      });
+      return Object.values(bd).reduce(function(a,b){return Math.max(a,b)}, 0);
+    })();
+    html += buildKpi('Peak Day', fmtCompact(peak), 'gal', peak, priorPeak, pl, sparkVal, VC.green700);
+  } else {
+    var maxLoad = records.reduce(function(a,b){return a.tons>b.tons?a:b}, {tons:0});
+    var priorMax = prior.reduce(function(a,b){return a.tons>b.tons?a:b}, {tons:0});
+    html += buildKpi('Largest Load', fmt(maxLoad.tons, 2), 'tons', maxLoad.tons, priorMax.tons, pl, sparkVal, VC.green700);
+    var dailyAvg = s.tons / (uniqueDays||1);
+    var priorAvg = ps.tons / (priorUniqueDays||1);
+    html += buildKpi('Daily Average', fmt(dailyAvg, 2), 'tons', dailyAvg, priorAvg, pl, sparkVal, VC.green500);
+    var avgLoad = s.tons / (s.loads||1);
+    var priorAvgLoad = ps.tons / (ps.loads||1);
+    html += buildKpi('Avg Load Size', fmt(avgLoad, 2), 'tons', avgLoad, priorAvgLoad, pl, null);
+    var byDayPeak = {};
+    records.forEach(function(r){
+      var k = r.date.toISOString().split('T')[0];
+      byDayPeak[k] = (byDayPeak[k]||0)+r.tons;
+    });
+    var peak = Object.values(byDayPeak).reduce(function(a,b){return Math.max(a,b)}, 0);
+    html += buildKpi('Peak Day', fmt(peak, 2), 'tons', peak, 0, pl, sparkVal, VC.green700);
+  }
+  document.getElementById('opsKpis').innerHTML = html;
+
+  // Weekly volume
+  document.getElementById('weeklyMeta').textContent = range.compact;
+  var byWk = {};
+  records.forEach(function(r){
+    var d = new Date(r.date);
+    d.setDate(d.getDate()-d.getDay());
+    var k = d.toISOString().split('T')[0];
+    byWk[k] = (byWk[k]||0) + (tab==='bulk'?r.gallons:r.tons);
+  });
+  var wK = Object.keys(byWk).sort();
+  destroyChart('chartWeekly');
+  if(wK.length){
+    STATE.charts.chartWeekly = new Chart(document.getElementById('chartWeekly'),{
+      type:'bar',
+      data:{
+        labels: wK.map(function(k){return 'Wk '+new Date(k+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}),
+        datasets:[{
+          label: tab==='bulk'?'Gallons':'Tons',
+          data: wK.map(function(k){return byWk[k]}),
+          backgroundColor: VC.green500,
+          borderRadius: 2,
+          maxBarThickness: 28
+        }]
+      },
+      options: chartOptsBar()
+    });
+  }
+
+  // Breakdown table
+  if(tab==='bulk'){
+    document.getElementById('opsBreakdownTitle').textContent = 'Strength Breakdown';
+    var byStrength = {};
+    records.forEach(function(r){
+      byStrength[r.strength||'(none)'] = (byStrength[r.strength||'(none)']||0) + r.gallons;
+    });
+    var sArr = Object.entries(byStrength).sort(function(a,b){return b[1]-a[1]});
+    var tot = s.gallons || 1;
+    var bHtml = '<thead><tr><th>Strength</th><th class="num-th">Gallons</th><th class="num-th">% of total</th><th class="num-th">Loads</th></tr></thead><tbody>';
+    sArr.forEach(function(p, i){
+      var pct = (p[1]/tot)*100;
+      var loadsCnt = records.filter(function(r){return (r.strength||'(none)')===p[0]}).length;
+      var fillCls = i===0 ? 'bar-fill' : 'bar-fill bar-fill-mid';
+      bHtml += '<tr><td>'+p[0]+'</td><td class="num">'+fmt(p[1],0)+'</td><td class="num"><span class="bar-cell"><span class="bar-track"><span class="'+fillCls+'" style="width:'+Math.max(2,pct).toFixed(0)+'%"></span></span>'+fmt(pct,0)+'%</span></td><td class="num">'+loadsCnt+'</td></tr>';
+    });
+    bHtml += '</tbody>';
+    document.getElementById('opsBreakdownTable').innerHTML = bHtml;
+  } else {
+    document.getElementById('opsBreakdownTitle').textContent = 'Container Type Breakdown';
+    var byUnits = {};
+    records.forEach(function(r){
+      byUnits[r.units||'(unset)'] = (byUnits[r.units||'(unset)']||0) + r.tons;
+    });
+    var uArr = Object.entries(byUnits).sort(function(a,b){return b[1]-a[1]}).slice(0,8);
+    var tot = s.tons || 1;
+    var bHtml = '<thead><tr><th>Container</th><th class="num-th">Tons</th><th class="num-th">% of total</th><th class="num-th">Loads</th></tr></thead><tbody>';
+    uArr.forEach(function(p, i){
+      var pct = (p[1]/tot)*100;
+      var loadsCnt = records.filter(function(r){return (r.units||'(unset)')===p[0]}).length;
+      var fillCls = i===0 ? 'bar-fill' : 'bar-fill bar-fill-mid';
+      var disp = p[0].length > 22 ? p[0].substring(0,20)+'\u2026' : p[0];
+      bHtml += '<tr><td title="'+p[0]+'">'+disp+'</td><td class="num">'+fmt(p[1],1)+'</td><td class="num"><span class="bar-cell"><span class="bar-track"><span class="'+fillCls+'" style="width:'+Math.max(2,pct).toFixed(0)+'%"></span></span>'+fmt(pct,0)+'%</span></td><td class="num">'+loadsCnt+'</td></tr>';
+    });
+    bHtml += '</tbody>';
+    document.getElementById('opsBreakdownTable').innerHTML = bHtml;
+  }
+
+  // Day-of-week distribution
+  var dowNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var byDow = [0,0,0,0,0,0,0];
+  records.forEach(function(r){
+    byDow[r.date.getDay()] += tab==='bulk' ? r.gallons : r.tons;
+  });
+  destroyChart('chartDow');
+  STATE.charts.chartDow = new Chart(document.getElementById('chartDow'),{
+    type:'bar',
+    data:{
+      labels: dowNames,
+      datasets:[{
+        label: tab==='bulk'?'Gallons':'Tons',
+        data: byDow,
+        backgroundColor: byDow.map(function(v){return v===Math.max.apply(null,byDow) && v>0 ? VC.green700 : VC.green500}),
+        borderRadius: 2,
+        maxBarThickness: 60
+      }]
+    },
+    options: chartOptsBar()
+  });
+}
+
+// =============================================================
+// RANKINGS
+// =============================================================
+function renderRankings(range){
+  var tab = STATE.activeTab;
+  var data = currentData();
+  var nameField = tab==='bulk' ? 'vendor' : 'customer';
+  var valueField = tab==='bulk' ? 'gallons' : 'tons';
+  var inRange = data.filter(function(r){return r.date>=range.start && r.date<=range.end});
+  var prior = getPriorRange();
+  var priorRecords = prior ? data.filter(function(r){return r.date>=prior.start && r.date<=prior.end}) : [];
+
+  document.getElementById('rankTitle').textContent = tab==='bulk' ? 'Top Vendors' : 'Top Customers';
+  document.getElementById('rankSub').textContent = range.label;
+
+  var byCust = {};
+  inRange.forEach(function(r){
+    var k = r[nameField];
+    if(!byCust[k]) byCust[k] = {value:0, loads:0};
+    byCust[k].value += r[valueField];
+    byCust[k].loads += 1;
+  });
+  var byPriorCust = {};
+  priorRecords.forEach(function(r){
+    var k = r[nameField];
+    byPriorCust[k] = (byPriorCust[k]||0) + r[valueField];
+  });
+  var sorted = Object.entries(byCust).sort(function(a,b){return b[1].value-a[1].value});
+  var maxVal = sorted.length ? sorted[0][1].value : 1;
+  var totalVal = sorted.reduce(function(s,e){return s+e[1].value}, 0);
+
+  var unitLabel = tab==='bulk' ? 'Gallons' : 'Tons';
+  var html = '<thead><tr><th style="width:30px">#</th><th>'+(tab==='bulk'?'Vendor':'Customer')+'</th><th class="num-th">'+unitLabel+'</th><th class="num-th">% of total</th><th class="num-th">Loads</th><th class="num-th">vs '+(prior?prior.label:'prior')+'</th></tr></thead><tbody>';
+  sorted.forEach(function(entry, idx){
+    var name = entry[0], val = entry[1].value, loads = entry[1].loads;
+    var pct = (val/totalVal)*100;
+    var priorVal = byPriorCust[name] || 0;
+    var delta = fmtDelta(val, priorVal);
+    var fillCls = idx===0 ? 'bar-fill' : idx<3 ? 'bar-fill bar-fill-mid' : 'bar-fill bar-fill-light';
+    var nameHtml = name + (name==='DePak'&&tab==='bulk' ? ' <span style="color:var(--ink-200);font-size:10px">internal</span>' : '');
+    html += '<tr><td style="color:var(--ink-300)">'+(idx+1)+'</td><td>'+nameHtml+'</td><td class="num">'+(tab==='bulk'?fmt(val,0):fmt(val,2))+'</td><td class="num"><span class="bar-cell"><span class="bar-track"><span class="'+fillCls+'" style="width:'+Math.max(2,pct*1.5).toFixed(0)+'%"></span></span>'+fmt(pct,1)+'%</span></td><td class="num">'+loads+'</td><td class="num '+delta.cls+'">'+delta.text+'</td></tr>';
+  });
+  if(!sorted.length) html += '<tr><td colspan="6" class="empty">No data in selected period</td></tr>';
+  // Total row
+  var priorTotal = Object.values(byPriorCust).reduce(function(s,v){return s+v}, 0);
+  var totalDelta = fmtDelta(totalVal, priorTotal);
+  html += '<tr class="dt-tot"><td></td><td>Total</td><td class="num">'+(tab==='bulk'?fmt(totalVal,0):fmt(totalVal,2))+'</td><td class="num">100%</td><td class="num">'+inRange.length+'</td><td class="num '+totalDelta.cls+'">'+totalDelta.text+'</td></tr>';
+  html += '</tbody>';
+  document.getElementById('rankTable').innerHTML = html;
+}
+
+// =============================================================
+// LOG
+// =============================================================
+function renderLog(records, range){
+  var tab = STATE.activeTab;
+  document.getElementById('logSub').textContent = fmt(records.length) + ' records  \u00B7  ' + range.label;
+  var sorted = records.slice().sort(function(a,b){return a.date-b.date});
+  var html, thead;
+  if(tab==='bulk'){
+    thead = '<thead><tr><th>Date</th><th>Time</th><th>Vendor</th><th>Strength</th><th>Tank</th><th class="num">Gallons</th><th>Driver</th><th>Ticket</th></tr></thead>';
+    html = sorted.map(function(r){
+      return '<tr><td>'+fmtDate(r.date)+'</td><td>'+r.time+'</td><td>'+r.vendor+'</td><td>'+r.strength+'</td><td>'+r.tank+'</td><td class="num">'+fmt(r.gallons,0)+'</td><td>'+r.driver+'</td><td>'+r.ticket+'</td></tr>';
+    }).join('');
+  } else {
+    thead = '<thead><tr><th>Date</th><th>Customer</th><th>Product</th><th class="num">Weight</th><th class="num">Qty</th><th>Units</th><th class="num">Tons</th><th>Truck Co</th></tr></thead>';
+    html = sorted.map(function(r){
+      return '<tr><td>'+fmtDate(r.date)+'</td><td>'+r.customer+'</td><td>'+r.product+'</td><td class="num">'+fmt(r.weight,0)+'</td><td class="num">'+fmt(r.quantity,0)+'</td><td>'+r.units+'</td><td class="num">'+fmt(r.tons,2)+'</td><td>'+r.truckingCo+'</td></tr>';
+    }).join('');
+  }
+  document.getElementById('logTable').innerHTML = thead + '<tbody>'+html+'</tbody>';
+}
+
+// =============================================================
+// CHART OPTIONS
+// =============================================================
+function chartOptsLine(){
+  return {
+    responsive:true,
+    maintainAspectRatio:false,
+    interaction:{intersect:false,mode:'index'},
+    plugins:{
+      legend:{display:false},
+      tooltip:{
+        backgroundColor: VC.ink900,
+        titleFont:{family:'Inter',size:11,weight:'600'},
+        bodyFont:{family:'Inter',size:11},
+        padding:8,
+        cornerRadius:3,
+        displayColors:false
+      }
+    },
+    scales:{
+      y:{
+        beginAtZero:true,
+        grid:{color:VC.line100,drawBorder:false},
+        ticks:{font:{family:'Inter',size:10},color:VC.ink300,callback:function(v){return fmtCompact(v)}}
+      },
+      x:{
+        grid:{display:false,drawBorder:false},
+        ticks:{font:{family:'Inter',size:10},color:VC.ink300,maxRotation:0,autoSkipPadding:20}
+      }
+    }
+  };
+}
+
+function chartOptsBar(){
+  return {
+    responsive:true,
+    maintainAspectRatio:false,
+    plugins:{
+      legend:{display:false},
+      tooltip:{
+        backgroundColor: VC.ink900,
+        titleFont:{family:'Inter',size:11,weight:'600'},
+        bodyFont:{family:'Inter',size:11},
+        padding:8,
+        cornerRadius:3,
+        displayColors:false,
+        callbacks:{label:function(c){return fmt(c.parsed.y, 0)}}
+      }
+    },
+    scales:{
+      y:{
+        beginAtZero:true,
+        grid:{color:VC.line100,drawBorder:false},
+        ticks:{font:{family:'Inter',size:10},color:VC.ink300,callback:function(v){return fmtCompact(v)}}
+      },
+      x:{
+        grid:{display:false,drawBorder:false},
+        ticks:{font:{family:'Inter',size:10},color:VC.ink300,maxRotation:0,autoSkipPadding:8}
+      }
+    }
+  };
+}
+
+function chartOptsCombo(){
+  return {
+    responsive:true,
+    maintainAspectRatio:false,
+    interaction:{intersect:false,mode:'index'},
+    plugins:{
+      legend:{
+        display:true,
+        position:'top',
+        align:'end',
+        labels:{font:{family:'Inter',size:11},boxWidth:10,boxHeight:10,padding:12,usePointStyle:false}
+      },
+      tooltip:{
+        backgroundColor: VC.ink900,
+        titleFont:{family:'Inter',size:11,weight:'600'},
+        bodyFont:{family:'Inter',size:11},
+        padding:8,
+        cornerRadius:3
+      }
+    },
+    scales:{
+      y:{
+        beginAtZero:true,
+        position:'left',
+        title:{display:true,text:'Tons CO\u2082e',font:{family:'Inter',size:10,weight:'600'},color:VC.ink300},
+        grid:{color:VC.line100,drawBorder:false},
+        ticks:{font:{family:'Inter',size:10},color:VC.ink300,callback:function(v){return fmtCompact(v)}}
+      },
+      y2:{
+        beginAtZero:true,
+        position:'right',
+        title:{display:true,text:'MMBtu',font:{family:'Inter',size:10,weight:'600'},color:VC.ink300},
+        grid:{display:false,drawBorder:false},
+        ticks:{font:{family:'Inter',size:10},color:VC.ink300,callback:function(v){return fmtCompact(v)}}
+      },
+      x:{
+        grid:{display:false,drawBorder:false},
+        ticks:{font:{family:'Inter',size:10},color:VC.ink300,maxRotation:0,autoSkipPadding:8}
+      }
+    }
+  };
+}
+
+// PDF generation lives in a separate inline script appended below
+</script>
+
+<!-- PDF GENERATION SCRIPT (inlined) -->
+<script>
+// =============================================================
+// VIRESCO PDF REPORT GENERATOR v2
+// Enterprise-grade design matching the dashboard aesthetic
+// =============================================================
+
+function generatePDF(){
+  var records = filteredData();
+  if(!records.length){
+    showToast('No data in selected period to export.', true);
+    return;
+  }
+  showToast('Generating PDF…');
+  setTimeout(function(){
+    try { _generatePDF(records); }
+    catch(err){ console.error(err); showToast('PDF error: '+err.message, true); }
+  }, 50);
+}
+
+function _generatePDF(records){
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({orientation:'portrait', unit:'pt', format:'letter'});
+  var pageW = doc.internal.pageSize.getWidth();   // 612
+  var pageH = doc.internal.pageSize.getHeight();  // 792
+  var margin = 36;
+
+  var tab = STATE.activeTab;
+  var summary = calc(records, tab);
+  var prior = priorData();
+  var priorSummary = calc(prior, tab);
+  var range = getDateRange();
+  var priorRange = getPriorRange();
+  var customer = STATE.filters.customer;
+  var customerName = customer === 'ALL' ? 'VIRESCO Plant-Wide' : customer;
+  var streamName = tab === 'bulk' ? 'Bulk Liquid' : 'DePak Organics';
+  var reportTitle = customer === 'ALL'
+    ? 'VIRESCO ' + streamName + ' Report'
+    : customer + ' \u2014 ' + streamName + ' Report';
+  var reportId = (tab==='bulk'?'BL':'DP') + '-' +
+    (customer==='ALL' ? 'PLANT' : customer.replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,8)) +
+    '-' + new Date().getTime().toString().substring(7);
+
+  // Palette (jsPDF uses RGB triplets)
+  var P = {
+    green900: [26, 61, 51],
+    green700: [40, 92, 77],
+    green500: [113, 204, 152],
+    green100: [230, 242, 236],
+    green50:  [243, 248, 245],
+    yellow500:[237, 224, 75],
+    ink900:   [15, 20, 16],
+    ink700:   [26, 31, 29],
+    ink500:   [61, 69, 64],
+    ink300:   [107, 114, 112],
+    ink200:   [156, 162, 159],
+    line300:  [229, 231, 229],
+    line100:  [245, 246, 245],
+    pos:      [31, 122, 85],
+    neg:      [176, 74, 58],
+    white:    [255, 255, 255]
+  };
+  function setFill(c){ doc.setFillColor(c[0],c[1],c[2]); }
+  function setText(c){ doc.setTextColor(c[0],c[1],c[2]); }
+  function setDraw(c){ doc.setDrawColor(c[0],c[1],c[2]); }
+
+  // =====================================================
+  // RECURRING ELEMENTS
+  // =====================================================
+  function drawHeader(pageNum, totalPages){
+    // Top accent bar (1px)
+    setFill(P.green700);
+    doc.rect(0, 0, pageW, 2, 'F');
+
+    // Brand
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(11);
+    setText(P.green700);
+    doc.text('VIRESCO', margin, 22);
+
+    // Subtitle
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    setText(P.ink300);
+    doc.text(streamName + ' Report', margin + 50, 22);
+
+    // Right side
+    doc.setFontSize(8);
+    setText(P.ink300);
+    doc.text('Page ' + pageNum + ' of ' + totalPages, pageW - margin, 22, {align:'right'});
+
+    // Header divider
+    setDraw(P.line300);
+    doc.setLineWidth(0.5);
+    doc.line(margin, 32, pageW-margin, 32);
+  }
+
+  function drawFooter(pageNum){
+    var y = pageH - 22;
+    setDraw(P.line300);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, pageW-margin, y);
+
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7);
+    setText(P.ink300);
+    doc.text(reportId, margin, y+10);
+    doc.text(reportTitle, pageW/2, y+10, {align:'center'});
+    doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}), pageW - margin, y+10, {align:'right'});
+  }
+
+  function sectionTitle(text, y){
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(11);
+    setText(P.ink900);
+    doc.text(text, margin, y);
+    return y + 4;
+  }
+
+  function sectionRule(y){
+    setDraw(P.green700);
+    doc.setLineWidth(0.8);
+    doc.line(margin, y, margin+30, y);
+    setDraw(P.line300);
+    doc.setLineWidth(0.5);
+    doc.line(margin+30, y, pageW-margin, y);
+    return y + 12;
+  }
+
+  // KPI card with sparkline + delta
+  function drawKpi(x, y, w, h, label, value, unit, curr, priorVal, priorLabel, sparkData, accent){
+    // Border
+    setDraw(P.line300);
+    doc.setLineWidth(0.5);
+    doc.rect(x, y, w, h, 'S');
+
+    // Label
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(6.5);
+    setText(P.ink300);
+    doc.text(label.toUpperCase(), x+8, y+11);
+
+    // Value
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(15);
+    setText(P.ink900);
+    var valX = x+8;
+    doc.text(value, valX, y+28);
+    if(unit){
+      var valW = doc.getTextWidth(value);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(8);
+      setText(P.ink300);
+      doc.text(unit, valX + valW + 2, y+28);
+    }
+
+    // Delta
+    var delta = fmtDelta(curr, priorVal);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7);
+    var deltaColor = delta.dir==='pos' ? P.pos : delta.dir==='neg' ? P.neg : P.ink300;
+    setText(deltaColor);
+    doc.text(delta.text, x+8, y+39);
+    doc.setFont('helvetica','normal');
+    setText(P.ink300);
+    var dw = doc.getTextWidth(delta.text);
+    doc.text('vs ' + priorLabel, x+8+dw+5, y+39);
+
+    // Sparkline
+    if(sparkData && sparkData.length){
+      drawSparkline(x+8, y+44, w-16, 14, sparkData, accent || P.green700);
+    }
+  }
+
+  function drawSparkline(x, y, w, h, data, color){
+    if(!data || data.length < 2) return;
+    var max = Math.max.apply(null, data);
+    if(max === 0) max = 1;
+    var n = data.length;
+    var pts = data.map(function(v, i){
+      var px = x + (i/(n-1))*w;
+      var py = y + h - 1 - (v/max)*(h-2);
+      return [px, py];
+    });
+    // Fill polygon
+    setFill([color[0], color[1], color[2]]);
+    doc.setGState(new doc.GState({opacity: 0.15}));
+    var fillPts = [[x, y+h]].concat(pts).concat([[x+w, y+h]]);
+    doc.lines(
+      fillPts.slice(1).map(function(p, i){return [p[0]-fillPts[i][0], p[1]-fillPts[i][1]]}),
+      fillPts[0][0], fillPts[0][1],
+      [1,1], 'F', true
+    );
+    doc.setGState(new doc.GState({opacity: 1}));
+    // Stroke
+    setDraw(color);
+    doc.setLineWidth(0.7);
+    for(var i=1; i<pts.length; i++){
+      doc.line(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1]);
+    }
+  }
+
+  // =====================================================
+  // PAGE 1 — COVER + KPI STRIP
+  // =====================================================
+  drawHeader(1, 5);
+  var y = 60;
+
+  // Title block — left aligned, no big centered marketing
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8);
+  setText(P.ink300);
+  doc.text(streamName.toUpperCase() + ' \u00B7 ' + (customer==='ALL'?'PLANT-WIDE':customerName.toUpperCase()), margin, y);
+  y += 18;
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(22);
+  setText(P.ink900);
+  doc.text(customerName, margin, y);
+  y += 6;
+
+  // Underline accent
+  setDraw(P.green700);
+  doc.setLineWidth(2);
+  doc.line(margin, y+4, margin+40, y+4);
+  y += 16;
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(11);
+  setText(P.ink500);
+  doc.text(range.label, margin, y);
+  y += 22;
+
+  // Brief intro paragraph
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  setText(P.ink500);
+  var intro;
+  if(tab==='bulk'){
+    intro = 'During this reporting period, ' + (customer==='ALL'?'VIRESCO\'s anaerobic digestion facility':customer) +
+      ' processed ' + fmt(summary.gallons, 0) + ' gallons of bulk liquid organics across ' +
+      fmt(summary.loads) + ' loads, avoiding ' + fmt(summary.ghg, 1) + ' Tons of CO\u2082e versus the alternative ' +
+      'fate of lagoon discharge or landfilling. The facility produced approximately ' + fmt(summary.mmbtu, 0) +
+      ' MMBtu of renewable energy and ' + fmt(summary.kwh, 0) + ' kWh of grid-quality electricity.';
+  } else {
+    intro = 'During this reporting period, ' + (customer==='ALL'?'VIRESCO\'s DePak operation':customer) +
+      ' processed ' + fmt(summary.tons, 1) + ' tons of packaged organic waste across ' +
+      fmt(summary.loads) + ' deliveries, avoiding ' + fmt(summary.ghg, 1) + ' Tons of CO\u2082e through ' +
+      'diversion from landfill. The facility produced approximately ' + fmt(summary.mmbtu, 0) +
+      ' MMBtu of renewable energy and recovered ' + fmt(summary.npk, 0) + ' kg of NPK-rich ReNutrient\u00AE digestate fertilizer.';
+  }
+  var splitIntro = doc.splitTextToSize(intro, pageW - 2*margin);
+  doc.text(splitIntro, margin, y);
+  y += splitIntro.length * 12 + 16;
+
+  // KPI strip — 5 across
+  var kpiW = (pageW - 2*margin - 4) / 5;
+  var kpiH = 64;
+  var pl = priorRange ? priorRange.label : 'prior';
+
+  // Build KPI data and sparklines
+  var sparkVal = generateSparkData(records, tab==='bulk'?'gallons':'tons', range);
+
+  if(tab==='bulk'){
+    drawKpi(margin + 0*(kpiW+1), y, kpiW, kpiH, 'Gallons', fmtCompact(summary.gallons), '', summary.gallons, priorSummary.gallons, pl, sparkVal, P.green500);
+    drawKpi(margin + 1*(kpiW+1), y, kpiW, kpiH, 'Tons CO2e Avoided', fmt(summary.ghg, 1), '', summary.ghg, priorSummary.ghg, pl, sparkVal, P.green700);
+    drawKpi(margin + 2*(kpiW+1), y, kpiW, kpiH, 'MMBtu Output', fmtCompact(summary.mmbtu), '', summary.mmbtu, priorSummary.mmbtu, pl, sparkVal, P.green700);
+    drawKpi(margin + 3*(kpiW+1), y, kpiW, kpiH, 'kWh Equivalent', fmtCompact(summary.kwh), '', summary.kwh, priorSummary.kwh, pl, sparkVal, P.green700);
+    drawKpi(margin + 4*(kpiW+1), y, kpiW, kpiH, 'Loads', fmt(summary.loads), '', summary.loads, priorSummary.loads, pl, sparkVal.map(function(v){return v>0?1:0}), P.ink300);
+  } else {
+    drawKpi(margin + 0*(kpiW+1), y, kpiW, kpiH, 'Tons Processed', fmt(summary.tons, 1), '', summary.tons, priorSummary.tons, pl, sparkVal, P.green500);
+    drawKpi(margin + 1*(kpiW+1), y, kpiW, kpiH, 'Tons CO2e Avoided', fmt(summary.ghg, 1), '', summary.ghg, priorSummary.ghg, pl, sparkVal, P.green700);
+    drawKpi(margin + 2*(kpiW+1), y, kpiW, kpiH, 'MMBtu Output', fmtCompact(summary.mmbtu), '', summary.mmbtu, priorSummary.mmbtu, pl, sparkVal, P.green700);
+    drawKpi(margin + 3*(kpiW+1), y, kpiW, kpiH, 'kWh Equivalent', fmtCompact(summary.kwh), '', summary.kwh, priorSummary.kwh, pl, sparkVal, P.green700);
+    drawKpi(margin + 4*(kpiW+1), y, kpiW, kpiH, 'Loads', fmt(summary.loads), '', summary.loads, priorSummary.loads, pl, sparkVal.map(function(v){return v>0?1:0}), P.ink300);
+  }
+  y += kpiH + 18;
+
+  // Operational summary table (left) + Sustainability KPIs (right)
+  var halfW = (pageW - 2*margin - 12) / 2;
+
+  // LEFT: Operational summary
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  setText(P.ink900);
+  doc.text('OPERATIONAL SUMMARY', margin, y);
+  setDraw(P.line300);
+  doc.setLineWidth(0.5);
+  doc.line(margin, y+4, margin+halfW, y+4);
+
+  var opsRows = [];
+  opsRows.push(['Reporting period', range.compact]);
+  opsRows.push(['Filter', customerName]);
+  opsRows.push(['Total ' + (tab==='bulk'?'loads':'deliveries'), fmt(summary.loads)]);
+  if(tab==='bulk'){
+    opsRows.push(['Average load size', fmt(summary.gallons/(summary.loads||1), 0) + ' gal']);
+    var maxLoad = records.reduce(function(a,b){return a.gallons>b.gallons?a:b}, {gallons:0});
+    if(maxLoad.gallons) opsRows.push(['Largest load', fmt(maxLoad.gallons, 0)+' gal']);
+  } else {
+    opsRows.push(['Average load size', fmt(summary.tons/(summary.loads||1), 2) + ' tons']);
+    var maxLoad = records.reduce(function(a,b){return a.tons>b.tons?a:b}, {tons:0});
+    if(maxLoad.tons) opsRows.push(['Largest load', fmt(maxLoad.tons, 2)+' tons']);
+  }
+  var uniqueDays = new Set(records.map(function(r){return r.date.toISOString().split('T')[0]})).size;
+  var totalDays = Math.ceil((range.end - range.start) / 86400000);
+  opsRows.push(['Active days', uniqueDays + ' of ' + totalDays]);
+
+  doc.autoTable({
+    startY: y + 8,
+    head: [],
+    body: opsRows,
+    margin: {left: margin, right: pageW - margin - halfW},
+    tableWidth: halfW,
+    theme: 'plain',
+    styles: {fontSize:8, cellPadding:{top:4,bottom:4,left:0,right:0}, lineColor:P.line100, lineWidth:0.5},
+    columnStyles: {
+      0: {cellWidth: halfW*0.55, textColor: P.ink300},
+      1: {cellWidth: halfW*0.45, halign:'right', fontStyle:'bold', textColor: P.ink700}
+    },
+    didDrawCell: function(data){
+      if(data.row.index < opsRows.length-1){
+        doc.setDrawColor(P.line100[0],P.line100[1],P.line100[2]);
+        doc.setLineWidth(0.5);
+        doc.line(data.cell.x, data.cell.y+data.cell.height, data.cell.x+data.cell.width, data.cell.y+data.cell.height);
+      }
+    }
+  });
+
+  // RIGHT: Sustainability summary
+  var rightX = margin + halfW + 12;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  setText(P.ink900);
+  doc.text('SUSTAINABILITY IMPACT', rightX, y);
+  setDraw(P.line300);
+  doc.setLineWidth(0.5);
+  doc.line(rightX, y+4, rightX+halfW, y+4);
+
+  var susRows = [];
+  susRows.push(['Cars off road (1 month)', fmt(summary.cars, 0)]);
+  susRows.push(['Tree-years sequestered', fmt(summary.trees, 0)]);
+  susRows.push(['Households powered (1 mo)', fmt(summary.households, 1)]);
+  susRows.push(['Vehicle miles avoided', fmt(summary.miles, 0)]);
+  if(tab==='bulk'){
+    susRows.push(['Carbon processed', fmt(summary.lbsCarbon, 0) + ' lbs']);
+    susRows.push(['ReNutrient\u00AE digestate', fmt(summary.digestate_gal, 0) + ' gal']);
+  } else {
+    susRows.push(['Biogas yield', fmt(summary.m3Biogas, 0) + ' m\u00B3']);
+    susRows.push(['ReNutrient\u00AE NPK', fmt(summary.npk, 0) + ' kg']);
+  }
+
+  doc.autoTable({
+    startY: y + 8,
+    head: [],
+    body: susRows,
+    margin: {left: rightX, right: margin},
+    tableWidth: halfW,
+    theme: 'plain',
+    styles: {fontSize:8, cellPadding:{top:4,bottom:4,left:0,right:0}, lineColor:P.line100, lineWidth:0.5},
+    columnStyles: {
+      0: {cellWidth: halfW*0.6, textColor: P.ink300},
+      1: {cellWidth: halfW*0.4, halign:'right', fontStyle:'bold', textColor: P.ink700}
+    },
+    didDrawCell: function(data){
+      if(data.row.index < susRows.length-1){
+        doc.setDrawColor(P.line100[0],P.line100[1],P.line100[2]);
+        doc.setLineWidth(0.5);
+        doc.line(data.cell.x, data.cell.y+data.cell.height, data.cell.x+data.cell.width, data.cell.y+data.cell.height);
+      }
+    }
+  });
+
+  drawFooter(1);
+
+  // =====================================================
+  // PAGE 2 — VOLUME ANALYTICS (chart + breakdowns)
+  // =====================================================
+  doc.addPage();
+  drawHeader(2, 5);
+  y = 50;
+
+  y = sectionTitle((tab==='bulk' ? 'Volume Analytics' : 'Tonnage Analytics'), y);
+  y = sectionRule(y);
+
+  // Daily volume chart
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(8);
+  setText(P.ink900);
+  doc.text((tab==='bulk' ? 'DAILY VOLUME' : 'DAILY TONS') + ' \u2014 ' + range.compact.toUpperCase(), margin, y);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(7);
+  setText(P.ink300);
+  doc.text((tab==='bulk' ? 'Gallons received per day' : 'Tons processed per day'), margin, y+10);
+  y += 18;
+
+  // Capture canvas — wait for chart to be active
+  var dailyCanvas = document.getElementById('chartDaily');
+  if(dailyCanvas && STATE.charts.chartDaily){
+    try {
+      var img = dailyCanvas.toDataURL('image/png');
+      doc.addImage(img, 'PNG', margin, y, pageW-2*margin, 160);
+      y += 168;
+    } catch(e){ y += 8; }
+  } else {
+    y += 8;
+  }
+
+  // Monthly trend chart
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(8);
+  setText(P.ink900);
+  doc.text('MONTHLY TREND \u2014 LAST 12 MONTHS', margin, y);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(7);
+  setText(P.ink300);
+  doc.text((tab==='bulk' ? 'Total gallons by month' : 'Total tons by month'), margin, y+10);
+  y += 18;
+
+  var monthlyCanvas = document.getElementById('chartMonthly');
+  if(monthlyCanvas && STATE.charts.chartMonthly){
+    try {
+      var img2 = monthlyCanvas.toDataURL('image/png');
+      doc.addImage(img2, 'PNG', margin, y, pageW-2*margin, 140);
+      y += 148;
+    } catch(e){ y += 8; }
+  }
+
+  // Compact stat strip at bottom of volume page
+  y += 6;
+  setDraw(P.line300);
+  doc.setLineWidth(0.5);
+  doc.line(margin, y, pageW-margin, y);
+  y += 10;
+
+  var statW = (pageW - 2*margin) / 4;
+  function statTile(x, label, value){
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(6.5);
+    setText(P.ink300);
+    doc.text(label.toUpperCase(), x, y+6);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(11);
+    setText(P.ink900);
+    doc.text(value, x, y+22);
+  }
+
+  if(tab==='bulk'){
+    var byDayPeak = {};
+    records.forEach(function(r){
+      var k = r.date.toISOString().split('T')[0];
+      byDayPeak[k] = (byDayPeak[k]||0)+r.gallons;
+    });
+    var peak = Object.values(byDayPeak).reduce(function(a,b){return Math.max(a,b)}, 0);
+    statTile(margin, 'Total Gallons', fmt(summary.gallons, 0));
+    statTile(margin + statW, 'Daily Avg (active)', fmt(summary.gallons/(uniqueDays||1), 0));
+    statTile(margin + 2*statW, 'Peak Day', fmt(peak, 0));
+    statTile(margin + 3*statW, 'Active Days', uniqueDays + ' of ' + totalDays);
+  } else {
+    var byDayPeakD = {};
+    records.forEach(function(r){
+      var k = r.date.toISOString().split('T')[0];
+      byDayPeakD[k] = (byDayPeakD[k]||0)+r.tons;
+    });
+    var peakD = Object.values(byDayPeakD).reduce(function(a,b){return Math.max(a,b)}, 0);
+    statTile(margin, 'Total Tons', fmt(summary.tons, 1));
+    statTile(margin + statW, 'Daily Avg (active)', fmt(summary.tons/(uniqueDays||1), 2));
+    statTile(margin + 2*statW, 'Peak Day', fmt(peakD, 2));
+    statTile(margin + 3*statW, 'Active Days', uniqueDays + ' of ' + totalDays);
+  }
+
+  drawFooter(2);
+
+  // =====================================================
+  // PAGE 3 — SUSTAINABILITY IMPACT
+  // =====================================================
+  doc.addPage();
+  drawHeader(3, 5);
+  y = 50;
+  y = sectionTitle('Sustainability Impact', y);
+  y = sectionRule(y);
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  setText(P.ink500);
+  var susIntro = 'Anaerobic digestion of organic waste yields three primary environmental benefits: greenhouse gas avoidance, renewable energy production, and recovery of nutrient-rich digestate for agricultural use. All values are derived from CARB ANDOC and EPA-published equivalency factors.';
+  var splitSus = doc.splitTextToSize(susIntro, pageW-2*margin);
+  doc.text(splitSus, margin, y);
+  y += splitSus.length * 12 + 12;
+
+  // Detail table
+  var detailRows = [];
+  detailRows.push(['GHG emissions avoided', fmt(summary.ghg, 1) + ' Tons CO\u2082e', 'CARB ANDOC framework, GWP-28']);
+  if(tab==='bulk'){
+    detailRows.push(['Carbon processed', fmt(summary.lbsCarbon, 0) + ' lbs', '@ 20,000 ppm carbon content']);
+    detailRows.push(['Biogas yield', fmt(summary.scfBiogas, 0) + ' SCF CH4', '23 SCF/lb C  /  ' + fmt(summary.m3Biogas, 0) + ' m3']);
+  } else {
+    detailRows.push(['Biogas yield', fmt(summary.m3Biogas, 0) + ' m3 CH4', '100 m3/ton x 73% digester eff.']);
+    detailRows.push(['SCF equivalent', fmt(summary.scfBiogas, 0) + ' SCF', '35.31 SCF per m3']);
+  }
+  detailRows.push(['MMBtu output', fmt(summary.mmbtu, 0) + ' MMBtu', '1 SCF CH4 = 1,037 BTU thermal']);
+  detailRows.push(['Electricity', fmt(summary.kwh, 0) + ' kWh', '40% biogas-to-energy efficiency']);
+  detailRows.push(['Households powered (1 mo)', fmt(summary.households, 1), '893 kWh/month avg US household']);
+  detailRows.push(['Cars off road (1 mo)', fmt(summary.cars, 0), '0.383 Tons CO2/car/month (EPA)']);
+  detailRows.push(['Tree-years sequestered', fmt(summary.trees, 0), '0.06 Tons CO2e per tree-year']);
+  detailRows.push(['Vehicle miles avoided', fmt(summary.miles, 0), '2,481 miles per Ton CO2e (EPA)']);
+  if(tab==='bulk'){
+    detailRows.push(['ReNutrient digestate', fmt(summary.digestate_gal, 0) + ' gal', '~95% of intake recovered as liquid']);
+  } else {
+    detailRows.push(['ReNutrient NPK', fmt(summary.npk, 0) + ' kg', '15 kg NPK per ton (digestate)']);
+  }
+
+  doc.autoTable({
+    startY: y,
+    head: [['Metric', 'Value', 'Source / Method']],
+    body: detailRows,
+    margin: {left: margin, right: margin},
+    theme: 'plain',
+    headStyles: {
+      fillColor: P.green700,
+      textColor: [255,255,255],
+      fontStyle: 'bold',
+      fontSize: 8,
+      cellPadding: 6,
+      halign: 'left'
+    },
+    bodyStyles: {fontSize: 9, cellPadding: 6, lineColor: P.line300, lineWidth: 0.3},
+    columnStyles: {
+      0: {cellWidth: 180, textColor: P.ink700},
+      1: {cellWidth: 130, halign: 'right', fontStyle: 'bold', textColor: P.ink900},
+      2: {textColor: P.ink300, fontSize: 8}
+    },
+    alternateRowStyles: {fillColor: [251, 252, 251]},
+    didDrawCell: function(data){
+      if(data.section==='body'){
+        // Add bottom border to each row
+        doc.setDrawColor(P.line300[0],P.line300[1],P.line300[2]);
+        doc.setLineWidth(0.3);
+        doc.line(data.cell.x, data.cell.y+data.cell.height, data.cell.x+data.cell.width, data.cell.y+data.cell.height);
+      }
+    }
+  });
+
+  y = doc.lastAutoTable.finalY + 14;
+
+  // Methodology callout
+  setFill(P.green50);
+  doc.rect(margin, y, pageW-2*margin, 50, 'F');
+  setFill(P.green700);
+  doc.rect(margin, y, 2, 50, 'F');
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(7);
+  setText(P.green900);
+  doc.text('METHODOLOGY', margin+10, y+12);
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8);
+  setText(P.ink500);
+  var methodText;
+  if(tab==='bulk'){
+    methodText = 'GHG calculated as gallons x 8.34 lbs/gal / 2,000 x 0.62 Tons CO2e/ton (CARB ANDOC: 86.5% ANDOC, 75% LFG capture, GWP-28). Biogas and energy derived from carbon content (20,000 ppm) at 23 SCF CH4/lb carbon and 1.34 kWh/lb carbon (40% genset efficiency baked in).';
+  } else {
+    methodText = 'GHG calculated as tons x 0.62 Tons CO2e/ton (CARB ANDOC). Biogas: 100 m3/ton x 73% digester efficiency = 73 m3 CH4/ton. Energy: m3 x 4 kWh/m3 (40% biogas-to-energy genset efficiency baked in). NPK: 15 kg per ton of digestate (ReNutrient).';
+  }
+  doc.text(methodText, margin+10, y+24, {maxWidth: pageW-2*margin-20});
+
+  drawFooter(3);
+
+  // =====================================================
+  // PAGE 4 — RANKINGS / CONTEXT
+  // =====================================================
+  doc.addPage();
+  drawHeader(4, 5);
+  y = 50;
+
+  if(customer === 'ALL'){
+    // Plant-wide: show full ranking table
+    y = sectionTitle('Top ' + (tab==='bulk'?'Vendors':'Customers'), y);
+    y = sectionRule(y);
+
+    var allRecsRange = (currentData()||[]).filter(function(r){return r.date>=range.start && r.date<=range.end});
+    var priorRecsRange = priorRange ? (currentData()||[]).filter(function(r){return r.date>=priorRange.start && r.date<=priorRange.end}) : [];
+
+    var nameField = tab==='bulk' ? 'vendor' : 'customer';
+    var valueField = tab==='bulk' ? 'gallons' : 'tons';
+
+    var byCust = {};
+    allRecsRange.forEach(function(r){
+      var k = r[nameField];
+      if(!byCust[k]) byCust[k] = {value:0, loads:0};
+      byCust[k].value += r[valueField];
+      byCust[k].loads += 1;
+    });
+    var byPriorCust = {};
+    priorRecsRange.forEach(function(r){
+      byPriorCust[r[nameField]] = (byPriorCust[r[nameField]]||0) + r[valueField];
+    });
+    var sorted = Object.entries(byCust).sort(function(a,b){return b[1].value-a[1].value});
+    var totalVal = sorted.reduce(function(s,e){return s+e[1].value}, 0);
+    var totalLoads = sorted.reduce(function(s,e){return s+e[1].loads}, 0);
+
+    var rankBody = sorted.map(function(entry, idx){
+      var name = entry[0], val = entry[1].value, loads = entry[1].loads;
+      var pct = (val/totalVal)*100;
+      var priorVal = byPriorCust[name] || 0;
+      var delta = fmtDelta(val, priorVal);
+      return [
+        (idx+1)+'',
+        name + (name==='DePak'&&tab==='bulk'?'  (internal)':''),
+        tab==='bulk' ? fmt(val,0) : fmt(val,2),
+        fmt(pct, 1) + '%',
+        loads+'',
+        delta.text
+      ];
+    });
+    // Total row
+    var priorTotal = Object.values(byPriorCust).reduce(function(s,v){return s+v}, 0);
+    var totalDeltaP = fmtDelta(totalVal, priorTotal);
+    rankBody.push([
+      {content:'', styles:{fillColor: P.green50}},
+      {content:'Total', styles:{fillColor: P.green50, fontStyle:'bold', textColor: P.green900}},
+      {content: tab==='bulk' ? fmt(totalVal,0) : fmt(totalVal,2), styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: P.green900}},
+      {content:'100%', styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: P.green900}},
+      {content: totalLoads+'', styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: P.green900}},
+      {content: totalDeltaP.text, styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: totalDeltaP.dir==='pos'?P.pos:totalDeltaP.dir==='neg'?P.neg:P.ink300}}
+    ]);
+
+    var unitLabel = tab==='bulk' ? 'Gallons' : 'Tons';
+    doc.autoTable({
+      startY: y,
+      head: [['#', (tab==='bulk'?'Vendor':'Customer'), unitLabel, '% of Total', 'Loads', 'vs ' + (priorRange?priorRange.label:'prior')]],
+      body: rankBody,
+      margin: {left: margin, right: margin},
+      theme: 'plain',
+      headStyles: {fillColor: P.green700, textColor: [255,255,255], fontStyle:'bold', fontSize:8, cellPadding:6},
+      bodyStyles: {fontSize:9, cellPadding:6, lineColor: P.line300, lineWidth:0.3},
+      columnStyles: {
+        0: {cellWidth:24, textColor: P.ink300, halign:'center'},
+        1: {cellWidth:160},
+        2: {halign:'right', fontStyle:'bold'},
+        3: {halign:'right', textColor: P.ink500},
+        4: {halign:'right', cellWidth:50},
+        5: {halign:'right', cellWidth:80, fontStyle:'bold'}
+      },
+      didParseCell: function(data){
+        if(data.section==='body' && data.column.index===5 && data.row.index < rankBody.length-1){
+          var txt = data.cell.text[0]||'';
+          if(txt.indexOf('\u25B2')>=0) data.cell.styles.textColor = P.pos;
+          else if(txt.indexOf('\u25BC')>=0) data.cell.styles.textColor = P.neg;
+          else data.cell.styles.textColor = P.ink300;
+        }
+      },
+      didDrawCell: function(data){
+        if(data.section==='body' && data.row.index < rankBody.length-1){
+          doc.setDrawColor(P.line300[0],P.line300[1],P.line300[2]);
+          doc.setLineWidth(0.3);
+          doc.line(data.cell.x, data.cell.y+data.cell.height, data.cell.x+data.cell.width, data.cell.y+data.cell.height);
+        }
+      }
+    });
+  } else {
+    // Customer-specific: show breakdown by strength/units + key dates
+    y = sectionTitle('Detail Breakdown', y);
+    y = sectionRule(y);
+
+    var halfWp = (pageW - 2*margin - 12) / 2;
+
+    // Left: breakdown
+    if(tab==='bulk'){
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8);
+      setText(P.ink900);
+      doc.text('STRENGTH DISTRIBUTION', margin, y);
+      var byStrength = {};
+      records.forEach(function(r){ byStrength[r.strength||'(none)'] = (byStrength[r.strength||'(none)']||0) + r.gallons; });
+      var sArr = Object.entries(byStrength).sort(function(a,b){return b[1]-a[1]});
+      var tot = summary.gallons || 1;
+      var sBody = sArr.map(function(p){return [p[0], fmt(p[1],0), fmt(100*p[1]/tot,1)+'%']});
+      doc.autoTable({
+        startY: y+8,
+        head: [['Strength', 'Gallons', '%']],
+        body: sBody,
+        margin: {left: margin, right: pageW-margin-halfWp},
+        tableWidth: halfWp,
+        theme:'plain',
+        headStyles: {fillColor: P.green700, textColor: [255,255,255], fontSize:8, cellPadding:5},
+        bodyStyles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
+        columnStyles: {1:{halign:'right'}, 2:{halign:'right'}}
+      });
+
+      var y2 = doc.lastAutoTable.finalY + 16;
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8);
+      setText(P.ink900);
+      doc.text('TANK ROUTING', margin, y2);
+      var byTank = {};
+      records.forEach(function(r){ byTank[r.tank||'(unset)'] = (byTank[r.tank||'(unset)']||0) + r.gallons; });
+      var tArr = Object.entries(byTank).sort(function(a,b){return b[1]-a[1]});
+      var tBody = tArr.map(function(p){return ['Tank '+p[0], fmt(p[1],0), fmt(100*p[1]/tot,1)+'%']});
+      doc.autoTable({
+        startY: y2+8,
+        head: [['Tank', 'Gallons', '%']],
+        body: tBody,
+        margin: {left: margin, right: pageW-margin-halfWp},
+        tableWidth: halfWp,
+        theme:'plain',
+        headStyles: {fillColor: P.green700, textColor: [255,255,255], fontSize:8, cellPadding:5},
+        bodyStyles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
+        columnStyles: {1:{halign:'right'}, 2:{halign:'right'}}
+      });
+    } else {
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8);
+      setText(P.ink900);
+      doc.text('CONTAINER MIX', margin, y);
+      var byUnits = {};
+      records.forEach(function(r){ byUnits[r.units||'(unset)'] = (byUnits[r.units||'(unset)']||0) + r.tons; });
+      var uArr = Object.entries(byUnits).sort(function(a,b){return b[1]-a[1]}).slice(0,8);
+      var tot = summary.tons || 1;
+      var uBody = uArr.map(function(p){
+        var n = p[0].length>22 ? p[0].substring(0,20)+'...' : p[0];
+        return [n, fmt(p[1],1), fmt(100*p[1]/tot,1)+'%'];
+      });
+      doc.autoTable({
+        startY: y+8,
+        head: [['Container', 'Tons', '%']],
+        body: uBody,
+        margin: {left: margin, right: pageW-margin-halfWp},
+        tableWidth: halfWp,
+        theme:'plain',
+        headStyles: {fillColor: P.green700, textColor: [255,255,255], fontSize:8, cellPadding:5},
+        bodyStyles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
+        columnStyles: {1:{halign:'right'}, 2:{halign:'right'}}
+      });
+    }
+
+    // Right: top products / dates
+    var rightX2 = margin + halfWp + 12;
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8);
+    setText(P.ink900);
+    doc.text('KEY ACTIVITY', rightX2, y);
+
+    var actRows = [];
+    var sortedRecs = records.slice().sort(function(a,b){return a.date-b.date});
+    if(sortedRecs.length){
+      actRows.push(['First load', fmtDate(sortedRecs[0].date)]);
+      actRows.push(['Last load', fmtDate(sortedRecs[sortedRecs.length-1].date)]);
+    }
+    if(tab==='bulk'){
+      var maxL = records.reduce(function(a,b){return a.gallons>b.gallons?a:b}, {gallons:0});
+      if(maxL.gallons){
+        actRows.push(['Largest load', fmt(maxL.gallons,0)+' gal']);
+        actRows.push(['Largest load date', fmtDate(maxL.date)]);
+      }
+      var byDriver = {};
+      records.forEach(function(r){if(r.driver)byDriver[r.driver]=(byDriver[r.driver]||0)+1});
+      var topDriver = Object.entries(byDriver).sort(function(a,b){return b[1]-a[1]})[0];
+      if(topDriver) actRows.push(['Top driver', topDriver[0]+' ('+topDriver[1]+' loads)']);
+    } else {
+      var maxL = records.reduce(function(a,b){return a.tons>b.tons?a:b}, {tons:0});
+      if(maxL.tons){
+        actRows.push(['Largest load', fmt(maxL.tons,2)+' tons']);
+        actRows.push(['Largest load date', fmtDate(maxL.date)]);
+      }
+      var byProd = {};
+      records.forEach(function(r){byProd[r.product||'(none)']=(byProd[r.product||'(none)']||0)+r.tons});
+      var topProd = Object.entries(byProd).sort(function(a,b){return b[1]-a[1]})[0];
+      if(topProd){
+        var pn = topProd[0].length>26 ? topProd[0].substring(0,24)+'...' : topProd[0];
+        actRows.push(['Top product', pn+' ('+fmt(topProd[1],1)+' t)']);
+      }
+    }
+    var uniqueDays2 = new Set(records.map(function(r){return r.date.toISOString().split('T')[0]})).size;
+    actRows.push(['Active days', uniqueDays2 + ' of ' + totalDays]);
+    actRows.push(['Avg loads/active day', fmt(records.length/(uniqueDays2||1), 1)]);
+
+    doc.autoTable({
+      startY: y+8,
+      head: [],
+      body: actRows,
+      margin: {left: rightX2, right: margin},
+      tableWidth: halfWp,
+      theme: 'plain',
+      styles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
+      columnStyles: {
+        0: {textColor: P.ink300, cellWidth: halfWp*0.5},
+        1: {halign:'right', fontStyle:'bold', textColor: P.ink700}
+      }
+    });
+  }
+
+  drawFooter(4);
+
+  // =====================================================
+  // PAGE 5 — INTAKE LOG
+  // =====================================================
+  doc.addPage();
+  drawHeader(5, 5);
+  y = 50;
+  y = sectionTitle('Intake Log Detail', y);
+  y = sectionRule(y);
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8);
+  setText(P.ink300);
+  doc.text(fmt(records.length) + ' records  \u00B7  ' + range.label, margin, y);
+  y += 12;
+
+  var sortedR = records.slice().sort(function(a,b){return a.date-b.date});
+  var logHead, logBody;
+  if(tab==='bulk'){
+    logHead = [['Date', 'Time', 'Vendor', 'Str.', 'Tank', 'Gallons', 'Driver', 'Ticket']];
+    logBody = sortedR.map(function(r){
+      return [
+        r.date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}),
+        r.time || '',
+        r.vendor.length > 18 ? r.vendor.substring(0,16)+'\u2026' : r.vendor,
+        r.strength || '',
+        r.tank || '',
+        fmt(r.gallons, 0),
+        r.driver || '',
+        r.ticket || ''
+      ];
+    });
+    logBody.push([
+      {content: 'Total \u2014 ' + fmt(sortedR.length) + ' loads', colSpan:5, styles:{fontStyle:'bold', fillColor: P.green50, textColor: P.green900}},
+      {content: fmt(summary.gallons, 0), styles:{fontStyle:'bold', fillColor: P.green50, textColor: P.green900, halign:'right'}},
+      {content: '', colSpan:2, styles:{fillColor: P.green50}}
+    ]);
+  } else {
+    logHead = [['Date', 'Customer', 'Product', 'Weight', 'Qty', 'Units', 'Tons', 'Truck Co.']];
+    logBody = sortedR.map(function(r){
+      return [
+        r.date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}),
+        r.customer.length > 14 ? r.customer.substring(0,12)+'\u2026' : r.customer,
+        (r.product||'').length > 18 ? (r.product||'').substring(0,16)+'\u2026' : (r.product||''),
+        fmt(r.weight, 0),
+        fmt(r.quantity, 0),
+        (r.units||'').length > 10 ? (r.units||'').substring(0,9)+'\u2026' : (r.units||''),
+        fmt(r.tons, 2),
+        (r.truckingCo||'').length > 12 ? (r.truckingCo||'').substring(0,10)+'\u2026' : (r.truckingCo||'')
+      ];
+    });
+    logBody.push([
+      {content: 'Total \u2014 ' + fmt(sortedR.length) + ' loads', colSpan:6, styles:{fontStyle:'bold', fillColor: P.green50, textColor: P.green900}},
+      {content: fmt(summary.tons, 2), styles:{fontStyle:'bold', fillColor: P.green50, textColor: P.green900, halign:'right'}},
+      {content: '', styles:{fillColor: P.green50}}
+    ]);
+  }
+
+  doc.autoTable({
+    startY: y,
+    head: logHead,
+    body: logBody,
+    margin: {left: margin, right: margin},
+    theme: 'plain',
+    headStyles: {fillColor: P.green700, textColor: [255,255,255], fontSize:7.5, fontStyle:'bold', cellPadding:5},
+    bodyStyles: {fontSize:7, cellPadding:3.5, lineColor: P.line300, lineWidth:0.2},
+    alternateRowStyles: {fillColor: [251, 252, 251]},
+    columnStyles: tab==='bulk' ? {
+      5: {halign:'right', fontStyle:'bold'}
+    } : {
+      3: {halign:'right'}, 4: {halign:'right'}, 6: {halign:'right', fontStyle:'bold'}
+    },
+    didDrawPage: function(data){
+      if(data.pageNumber > 1){
+        // jsPDF's autoTable spawned a new page — re-draw our header/footer
+        drawHeader(5+data.pageNumber-1, 5+data.pageNumber-1);
+        drawFooter(5+data.pageNumber-1);
+      }
+    }
+  });
+
+  // Methodology footer block (small — at bottom of last log page)
+  var finalY = doc.lastAutoTable.finalY + 18;
+  if(finalY < pageH - 90){
+    setFill(P.green50);
+    doc.rect(margin, finalY, pageW-2*margin, 60, 'F');
+    setFill(P.green700);
+    doc.rect(margin, finalY, 2, 60, 'F');
+
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7);
+    setText(P.green900);
+    doc.text('ABOUT THIS REPORT', margin+10, finalY+12);
+
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.5);
+    setText(P.ink500);
+    var aboutText = 'VIRESCO operates a 3.2 MW anaerobic digestion facility in Turtle Lake, Wisconsin, converting bulk liquid and packaged organic waste streams into renewable electricity, ReNutrient digestate fertilizer, and recovered packaging materials. All sustainability calculations use CARB ANDOC and EPA-published equivalency factors and are auditable from the underlying intake data.';
+    doc.text(aboutText, margin+10, finalY+24, {maxWidth: pageW-2*margin-20});
+
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(7);
+    setText(P.ink700);
+    doc.text('Report ID: ' + reportId, margin+10, finalY+54);
+  }
+
+  drawFooter(5);
+
+  // =====================================================
+  // SAVE
+  // =====================================================
+  var fileName = reportTitle + ' \u2014 ' + range.shortLabel + '.pdf';
+  doc.save(fileName);
+  showToast('PDF saved: ' + fileName);
+}
+
+</script>
+
+</body>
+</html>
