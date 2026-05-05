@@ -1215,7 +1215,9 @@ function parseBulkLiquid(file, callback){
       var sheet = wb.Sheets[sheetName];
       var rows = XLSX.utils.sheet_to_json(sheet, {raw:false, defval:null});
       var records = [];
+      var rowIdx = 0;
       rows.forEach(function(r){
+        rowIdx++;
         var dateVal = r['Date'];
         var date = null;
         if(dateVal instanceof Date) date = dateVal;
@@ -1233,7 +1235,8 @@ function parseBulkLiquid(file, callback){
           gallons: gallons,
           driver: (r['Driver']||'').toString().trim(),
           ticket: (r['Ticket #']||r['Ticket']||'').toString().trim(),
-          notes: (r['Special Notes']||'').toString().trim()
+          notes: (r['Special Notes']||'').toString().trim(),
+          _srcRow: rowIdx  // synthetic identifier to prevent fallback dedup from collapsing physically distinct rows
         });
       });
       callback(records, null);
@@ -1262,7 +1265,9 @@ function parseDePak(file, callback){
       var sheet = wb.Sheets[sheetName];
       var rows = XLSX.utils.sheet_to_json(sheet, {raw:false, defval:null});
       var records = [];
+      var rowIdx = 0;
       rows.forEach(function(r){
+        rowIdx++;
         var dateVal = r['Date'];
         var date = null;
         if(dateVal instanceof Date) date = dateVal;
@@ -1282,7 +1287,8 @@ function parseDePak(file, callback){
           tons: tons,
           truck: (r['Truck #']||'').toString().trim(),
           truckingCo: (r['Trucking Company']||'').toString().trim(),
-          bol: (r['Customer BOL#']||r['VIRESCO BOL#']||'').toString().trim()
+          bol: (r['Customer BOL#']||r['VIRESCO BOL#']||'').toString().trim(),
+          _srcRow: rowIdx
         });
       });
       callback(records, null);
@@ -1303,34 +1309,20 @@ STATE.warnDismissed = false;
 
 // Dedup key: yyyy-mm-dd | vendor/customer (lowercased) | rounded volume
 function dedupKey(r, stream){
-  // Strategy: prefer ticket/BOL as primary unique key. If absent, build a key
-  // specific enough that legitimate same-day same-vendor loads aren't collapsed.
-  // It is far better to keep a real duplicate (cosmetic) than to silently drop
-  // a real load (data loss).
+  // Strategy: a record is a "duplicate" only if it's truly the same delivery.
+  // Primary key: date + vendor + ticket/BOL (handles cross-year ticket-number reuse correctly)
+  // Fallback: (source filename + source row number) when ticket missing — guaranteed
+  // unique within a file. Two physically distinct rows can never collide on this.
   var dateKey = r.date.toISOString().split('T')[0];
-  if(stream === 'bulk'){
-    var ticket = (r.ticket||'').toString().trim();
-    var vendor = (r.vendor||'').toLowerCase().trim();
-    if(ticket){
-      // Ticket numbers are unique per delivery
-      return 'BL|t|' + vendor + '|' + ticket;
-    }
-    // No ticket: use date + exact time + driver + exact gallons (no rounding)
-    var time = (r.time||'').toString().trim();
-    var driver = (r.driver||'').toString().trim().toLowerCase();
-    var tank = (r.tank||'').toString().trim();
-    return 'BL|nt|' + dateKey + '|' + vendor + '|' + time + '|' + driver + '|' + tank + '|' + r.gallons;
-  } else {
-    var bol = (r.bol||'').toString().trim();
-    var customer = (r.customer||'').toLowerCase().trim();
-    if(bol){
-      return 'DP|b|' + customer + '|' + bol;
-    }
-    var time = (r.time||'').toString().trim();
-    var truck = (r.truck||'').toString().trim().toLowerCase();
-    var product = (r.product||'').toString().trim().toLowerCase();
-    return 'DP|nb|' + dateKey + '|' + customer + '|' + time + '|' + truck + '|' + product + '|' + r.tons + '|' + r.weight + '|' + r.quantity;
+  var vendor = stream === 'bulk' ? (r.vendor||'').toLowerCase().trim() : (r.customer||'').toLowerCase().trim();
+  var ticket = stream === 'bulk' ? (r.ticket||'').toString().trim() : (r.bol||'').toString().trim();
+  if(ticket){
+    return (stream==='bulk'?'BL':'DP') + '|t|' + dateKey + '|' + vendor + '|' + ticket;
   }
+  // No ticket → use file+row identity
+  var fileName = (r._srcFile || '').toLowerCase();
+  var srcRow = r._srcRow || 0;
+  return (stream==='bulk'?'BL':'DP') + '|f|' + fileName + '|' + srcRow;
 }
 
 function mergeStream(stream){
@@ -1339,16 +1331,23 @@ function mergeStream(stream){
   var seen = {};
   var merged = [];
   var dupCount = 0;
+  var droppedReasons = {ticketDup:0, fileDup:0};
   files.forEach(function(f){
     f.records.forEach(function(r){
       // Make a copy so we don't mutate the original raw file records (preserves undo)
       var rcopy = Object.assign({}, r);
+      rcopy._srcFile = f.name;  // tag with source filename for fallback dedup
       // Apply existing merge rules so the dedup key uses canonical names
       if(STATE.merges && STATE.merges[role]){
         rcopy[role] = canonicalFor(rcopy[role], role);
       }
       var k = dedupKey(rcopy, stream);
-      if(seen[k]){ dupCount++; return; }
+      if(seen[k]){
+        dupCount++;
+        if(k.indexOf('|t|') >= 0) droppedReasons.ticketDup++;
+        else droppedReasons.fileDup++;
+        return;
+      }
       seen[k] = true;
       merged.push(rcopy);
     });
@@ -1357,7 +1356,7 @@ function mergeStream(stream){
   merged.sort(function(a,b){return a.date - b.date});
   if(stream === 'bulk') STATE.bulkData = merged;
   else STATE.depakData = merged;
-  return {count: merged.length, dupCount: dupCount};
+  return {count: merged.length, dupCount: dupCount, reasons: droppedReasons};
 }
 
 function renderFileList(stream){
@@ -2473,11 +2472,21 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   var pl = priorRange ? priorRange.label : null;
   var sparkVal = generateSparkData(records, tab==='bulk'?'gallons':'tons', range);
 
+  // Annualization scale: convert per-month metrics to per-year equivalent
+  // Cap at 1.0 for periods >= 1 year (so multi-year periods show "actual" totals)
+  var periodDays = Math.max(1, (range.end - range.start) / 86400000);
+  var annualScale = periodDays >= 365 ? 1.0 : (365 / periodDays);
+  var carsAnnual = s.cars * annualScale;
+  var homesAnnual = s.households * annualScale;
+  var carsAnnualP = ps.cars * annualScale;
+  var homesAnnualP = ps.households * annualScale;
+  var rateLabel = periodDays >= 350 ? 'over period' : 'annualized';
+
   var html = '';
   html += buildKpi('Tons CO\u2082e Avoided', fmt(s.ghg, 1), '', s.ghg, ps.ghg, pl, sparkVal, VC.green700);
-  html += buildKpi('Cars Off Road', fmt(s.cars, 0), '/mo', s.cars, ps.cars, pl, sparkVal, VC.green500);
+  html += buildKpi('Cars Off Road', fmt(carsAnnual, 0), '/yr', carsAnnual, carsAnnualP, pl, sparkVal, VC.green500);
   html += buildKpi('Tree-Years', fmt(s.trees, 0), '', s.trees, ps.trees, pl, sparkVal, VC.green500);
-  html += buildKpi('Households', fmt(s.households, 1), '/mo', s.households, ps.households, pl, sparkVal, VC.green700);
+  html += buildKpi('Homes Powered', fmt(homesAnnual, 0), '/yr', homesAnnual, homesAnnualP, pl, sparkVal, VC.green700);
   if(tab==='bulk'){
     html += buildKpi('ReNutrient\u00AE', fmtCompact(s.digestate_gal), 'gal', s.digestate_gal, ps.digestate_gal, pl, sparkVal, VC.yellow500);
   } else {
@@ -2485,11 +2494,11 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   }
   document.getElementById('susKpis').innerHTML = html;
 
-  // Equivalent table
+  // Equivalent table — annualized rate framing
   var equivRows = [
-    ['Cars off road (1 month)', fmt(s.cars, 0)],
-    ['Tree-years sequestered', fmt(s.trees, 0)],
-    ['Households powered (1 month)', fmt(s.households, 1)],
+    ['Cars off road (' + rateLabel + ')', fmt(carsAnnual, 0)],
+    ['Tree-years of sequestration', fmt(s.trees, 0)],
+    ['Homes powered (' + rateLabel + ')', fmt(homesAnnual, 0)],
     ['Vehicle miles avoided', fmt(s.miles, 0)]
   ];
   var equivHtml = '<thead><tr><th>Equivalent</th><th class="num-th">Value</th></tr></thead><tbody>';
@@ -2512,9 +2521,9 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   }
   rows.push(['MMBtu output', fmt(s.mmbtu, 0) + ' MMBtu', '1 SCF CH\u2084 = 1,037 BTU']);
   rows.push(['Electricity', fmt(s.kwh, 0) + ' kWh', '40% biogas-to-energy efficiency']);
-  rows.push(['Households powered', fmt(s.households, 1) + ' /month', '893 kWh/month avg US household']);
-  rows.push(['Cars off road', fmt(s.cars, 0) + ' /month', '0.383 Tons CO\u2082/car/month (EPA)']);
-  rows.push(['Tree-years', fmt(s.trees, 0), '0.06 Tons CO\u2082e per tree-year']);
+  rows.push(['Homes powered (' + rateLabel + ')', fmt(homesAnnual, 0), '893 kWh/month avg US household']);
+  rows.push(['Cars off road (' + rateLabel + ')', fmt(carsAnnual, 0), '0.383 Tons CO\u2082/car/month (EPA)']);
+  rows.push(['Tree-years sequestered', fmt(s.trees, 0), '0.06 Tons CO\u2082e per tree-year']);
   rows.push(['Vehicle miles avoided', fmt(s.miles, 0), '2,481 miles per Ton CO\u2082e (EPA)']);
   if(tab==='bulk'){
     rows.push(['ReNutrient\u00AE digestate', fmt(s.digestate_gal, 0) + ' gal', '~95% of intake recovered']);
@@ -3544,14 +3553,26 @@ function _generatePDF(records){
   y += susLines.length * 13 + 14;
 
   // Big-number callouts grid (2x2)
+  // Annualize the rate-based metrics (cars, trees, households) so they read consistently
+  // regardless of report period. Math: scale by (365 / period_days). Cap at 1.0 for periods
+  // longer than a year (lifetime, multi-year) to show "actual" instead of inflated.
+  var periodDays = Math.max(1, (range.end - range.start) / 86400000);
+  var annualScale = periodDays >= 365 ? 1.0 : (365 / periodDays);
+  var carsAnnual = summary.cars * annualScale;       // cars/year equivalent
+  var treesAnnual = summary.trees;                    // trees is already a tree-year metric, no scaling
+  var homesAnnual = summary.households * annualScale; // households powered for a year equivalent
+  var milesTotal = summary.miles;                     // miles is total — no time component
+
+  var periodLabel = periodDays >= 350 ? 'over the period' : 'annualized rate';
+
   var calloutW = (contentW - 12) / 2;
   var calloutH = 56;
 
-  bigCallout(margin + 0*(calloutW+12), y, calloutW, calloutH, fmt(summary.cars, 0) + ' cars/yr', 'Off the road equivalent', P.green700);
-  bigCallout(margin + 1*(calloutW+12), y, calloutW, calloutH, fmt(summary.trees, 0) + ' trees/yr', 'Equivalent planted', P.green700);
+  bigCallout(margin + 0*(calloutW+12), y, calloutW, calloutH, fmt(carsAnnual, 0) + ' cars', 'Off the road for one year (' + periodLabel + ')', P.green700);
+  bigCallout(margin + 1*(calloutW+12), y, calloutW, calloutH, fmt(treesAnnual, 0) + ' trees', 'Tree-years of carbon sequestration', P.green700);
   y += calloutH + 12;
-  bigCallout(margin + 0*(calloutW+12), y, calloutW, calloutH, fmt(summary.households, 1) + ' homes', 'Powered for one month', P.yellow500);
-  bigCallout(margin + 1*(calloutW+12), y, calloutW, calloutH, fmtCompact(summary.miles) + ' miles', 'Vehicle miles avoided', P.yellow500);
+  bigCallout(margin + 0*(calloutW+12), y, calloutW, calloutH, fmt(homesAnnual, 0) + ' homes', 'Powered for one year (' + periodLabel + ')', P.yellow500);
+  bigCallout(margin + 1*(calloutW+12), y, calloutW, calloutH, fmtCompact(milesTotal) + ' miles', 'Vehicle miles avoided (total)', P.yellow500);
   y += calloutH + 18;
 
   // Detail table
