@@ -2910,6 +2910,7 @@ function _generatePDF(records){
   var pageW = doc.internal.pageSize.getWidth();   // 612
   var pageH = doc.internal.pageSize.getHeight();  // 792
   var margin = 36;
+  var contentW = pageW - 2*margin;
 
   var tab = STATE.activeTab;
   var summary = calc(records, tab);
@@ -2927,21 +2928,39 @@ function _generatePDF(records){
     (customer==='ALL' ? 'PLANT' : customer.replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,8)) +
     '-' + new Date().getTime().toString().substring(7);
 
-  // Palette (jsPDF uses RGB triplets)
+  // Determine if prior period has meaningful data (>= 5% of current)
+  var priorMeaningful = prior && prior.length > 0;
+  if(priorMeaningful && tab==='bulk'){
+    priorMeaningful = priorSummary.gallons > 0 && priorSummary.gallons >= summary.gallons * 0.05;
+  } else if(priorMeaningful && tab==='depak'){
+    priorMeaningful = priorSummary.tons > 0 && priorSummary.tons >= summary.tons * 0.05;
+  }
+
+  // VIRESCO palette
   var P = {
     green900: [26, 61, 51],
+    green800: [33, 76, 64],
     green700: [40, 92, 77],
+    green600: [56, 117, 99],
     green500: [113, 204, 152],
+    green300: [168, 224, 188],
+    green200: [200, 232, 213],
     green100: [230, 242, 236],
     green50:  [243, 248, 245],
     yellow500:[237, 224, 75],
+    yellow300:[244, 235, 137],
+    yellow100:[250, 246, 212],
+    yellow50: [253, 250, 232],
     ink900:   [15, 20, 16],
-    ink700:   [26, 31, 29],
-    ink500:   [61, 69, 64],
-    ink300:   [107, 114, 112],
-    ink200:   [156, 162, 159],
-    line300:  [229, 231, 229],
-    line100:  [245, 246, 245],
+    ink800:   [26, 31, 29],
+    ink700:   [42, 48, 44],
+    ink500:   [80, 88, 83],
+    ink400:   [120, 128, 122],
+    ink300:   [150, 158, 152],
+    ink200:   [196, 202, 197],
+    line300:  [225, 228, 224],
+    line200:  [238, 240, 237],
+    line100:  [246, 248, 245],
     pos:      [31, 122, 85],
     neg:      [176, 74, 58],
     white:    [255, 255, 255]
@@ -2950,391 +2969,394 @@ function _generatePDF(records){
   function setText(c){ doc.setTextColor(c[0],c[1],c[2]); }
   function setDraw(c){ doc.setDrawColor(c[0],c[1],c[2]); }
 
-  // =====================================================
-  // RECURRING ELEMENTS
-  // =====================================================
-  function drawHeader(pageNum, totalPages){
-    // Top accent bar (1px)
-    setFill(P.green700);
-    doc.rect(0, 0, pageW, 2, 'F');
-
-    // Brand
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(11);
-    setText(P.green700);
-    doc.text('VIRESCO', margin, 22);
-
-    // Subtitle
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(8);
-    setText(P.ink300);
-    doc.text(streamName + ' Report', margin + 50, 22);
-
-    // Right side
-    doc.setFontSize(8);
-    setText(P.ink300);
-    doc.text('Page ' + pageNum + ' of ' + totalPages, pageW - margin, 22, {align:'right'});
-
-    // Header divider
-    setDraw(P.line300);
-    doc.setLineWidth(0.5);
-    doc.line(margin, 32, pageW-margin, 32);
+  // Replace special characters that don't render in jsPDF Helvetica WinAnsi
+  function clean(s){
+    if(!s) return '';
+    return String(s)
+      .replace(/CO\u2082e/g, 'CO2e')
+      .replace(/m\u00B3/g, 'm3')
+      .replace(/CH\u2084/g, 'CH4')
+      .replace(/\u00B2/g, '2')
+      .replace(/\u2013/g, '-')
+      .replace(/\u2014/g, '-')
+      .replace(/\u2018|\u2019/g, "'")
+      .replace(/\u201C|\u201D/g, '"');
   }
 
-  function drawFooter(pageNum){
-    var y = pageH - 22;
+  // ===========================================================
+  // RECURRING ELEMENTS
+  // ===========================================================
+  function drawPageHeader(pageNum, totalPages){
+    // Dark green header bar at very top
+    setFill(P.green900);
+    doc.rect(0, 0, pageW, 28, 'F');
+
+    // Brand on left
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(11);
+    setText(P.white);
+    doc.text('VIRESCO', margin, 18);
+
+    // Stream identifier
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(9);
+    setText(P.green200);
+    doc.text(clean(streamName) + ' Report', margin + 60, 18);
+
+    // Page number on right
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(9);
+    setText(P.green200);
+    doc.text('Page ' + pageNum + ' of ' + totalPages, pageW - margin, 18, {align:'right'});
+
+    // Thin yellow accent line below header bar
+    setFill(P.yellow500);
+    doc.rect(0, 28, pageW, 1.5, 'F');
+  }
+
+  function drawPageFooter(pageNum){
+    var y = pageH - 28;
     setDraw(P.line300);
     doc.setLineWidth(0.5);
-    doc.line(margin, y, pageW-margin, y);
+    doc.line(margin, y, pageW - margin, y);
 
     doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    setText(P.ink400);
+    var leftText = 'VIRESCO  |  ' + clean(streamName) + '  |  Confidential  |  Prepared for ' + clean(customerName);
+    doc.text(leftText, margin, y + 12);
+    doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}), pageW - margin, y + 12, {align:'right'});
+
     doc.setFontSize(7);
     setText(P.ink300);
-    doc.text(reportId, margin, y+10);
-    doc.text(reportTitle, pageW/2, y+10, {align:'center'});
-    doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}), pageW - margin, y+10, {align:'right'});
+    doc.text(reportId, margin, y + 22);
   }
 
-  function sectionTitle(text, y){
+  // Section title bar — colored band like Denali's "EXECUTIVE SUMMARY" header
+  function sectionBar(title, subtitle, y){
+    var h = 22;
+    // Solid green bar
+    setFill(P.green700);
+    doc.rect(margin, y, contentW, h, 'F');
+    // Title in white
     doc.setFont('helvetica','bold');
     doc.setFontSize(11);
-    setText(P.ink900);
-    doc.text(text, margin, y);
-    return y + 4;
+    setText(P.white);
+    doc.text(clean(title).toUpperCase(), margin + 12, y + 14.5);
+    // Subtitle on right
+    if(subtitle){
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(9);
+      setText(P.green200);
+      doc.text(clean(subtitle), pageW - margin - 12, y + 14.5, {align:'right'});
+    }
+    return y + h + 14;
   }
 
-  function sectionRule(y){
-    setDraw(P.green700);
-    doc.setLineWidth(0.8);
-    doc.line(margin, y, margin+30, y);
-    setDraw(P.line300);
-    doc.setLineWidth(0.5);
-    doc.line(margin+30, y, pageW-margin, y);
-    return y + 12;
+  // Big-number callout (used for sustainability page equivalencies)
+  function bigCallout(x, y, w, h, value, label, accent){
+    setFill(P.green100);
+    doc.rect(x, y, w, h, 'F');
+    setFill(accent || P.green500);
+    doc.rect(x, y, 3, h, 'F');
+
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(20);
+    setText(P.green900);
+    doc.text(clean(value), x + 14, y + 26);
+
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    setText(P.ink500);
+    doc.text(clean(label).toUpperCase(), x + 14, y + 42);
   }
 
-  // KPI card with sparkline + delta
-  function drawKpi(x, y, w, h, label, value, unit, curr, priorVal, priorLabel, sparkData, accent){
-    // Border
-    setDraw(P.line300);
-    doc.setLineWidth(0.5);
-    doc.rect(x, y, w, h, 'S');
+  // KPI tile with colored accent stripe at top
+  function drawKpi(x, y, w, h, label, value, unit, curr, priorVal, priorLabel, accent){
+    // Background
+    setFill(P.line100);
+    doc.rect(x, y, w, h, 'F');
+    // Accent stripe at top
+    setFill(accent || P.green500);
+    doc.rect(x, y, w, 3, 'F');
 
     // Label
     doc.setFont('helvetica','normal');
-    doc.setFontSize(6.5);
-    setText(P.ink300);
-    doc.text(label.toUpperCase(), x+8, y+11);
+    doc.setFontSize(7);
+    setText(P.ink500);
+    doc.text(clean(label).toUpperCase(), x + 10, y + 17);
 
-    // Value
+    // Value (large)
     doc.setFont('helvetica','bold');
-    doc.setFontSize(15);
-    setText(P.ink900);
-    var valX = x+8;
-    doc.text(value, valX, y+28);
+    doc.setFontSize(20);
+    setText(P.green900);
+    var vy = y + 42;
+    doc.text(clean(value), x + 10, vy);
+
+    // Unit beside value
     if(unit){
-      var valW = doc.getTextWidth(value);
+      var valW = doc.getTextWidth(clean(value));
       doc.setFont('helvetica','normal');
-      doc.setFontSize(8);
-      setText(P.ink300);
-      doc.text(unit, valX + valW + 2, y+28);
+      doc.setFontSize(9);
+      setText(P.ink500);
+      doc.text(clean(unit), x + 10 + valW + 4, vy);
     }
 
-    // Delta (or "all-time total" label if no prior period)
-    if(priorLabel){
+    // Delta line — only shown when prior is meaningful
+    if(priorLabel && priorMeaningful){
       var delta = fmtDelta(curr, priorVal);
       doc.setFont('helvetica','bold');
       doc.setFontSize(7);
-      var deltaColor = delta.dir==='pos' ? P.pos : delta.dir==='neg' ? P.neg : P.ink300;
+      var deltaColor = delta.dir==='pos' ? P.pos : delta.dir==='neg' ? P.neg : P.ink400;
       setText(deltaColor);
-      doc.text(delta.text, x+8, y+39);
+      doc.text(clean(delta.text), x + 10, y + 56);
       doc.setFont('helvetica','normal');
+      setText(P.ink400);
+      var dw = doc.getTextWidth(clean(delta.text));
+      doc.text('vs ' + clean(priorLabel), x + 10 + dw + 5, y + 56);
+    } else if(priorLabel){
+      doc.setFont('helvetica','italic');
+      doc.setFontSize(7);
       setText(P.ink300);
-      var dw = doc.getTextWidth(delta.text);
-      doc.text('vs ' + priorLabel, x+8+dw+5, y+39);
+      doc.text('first reporting period', x + 10, y + 56);
     } else {
       doc.setFont('helvetica','italic');
       doc.setFontSize(7);
       setText(P.ink300);
-      doc.text('all-time total', x+8, y+39);
-    }
-
-    // Sparkline
-    if(sparkData && sparkData.length){
-      drawSparkline(x+8, y+44, w-16, 14, sparkData, accent || P.green700);
+      doc.text('all-time total', x + 10, y + 56);
     }
   }
 
-  function drawSparkline(x, y, w, h, data, color){
-    if(!data || data.length < 2) return;
-    var max = Math.max.apply(null, data);
-    if(max === 0) max = 1;
-    var n = data.length;
-    var pts = data.map(function(v, i){
-      var px = x + (i/(n-1))*w;
-      var py = y + h - 1 - (v/max)*(h-2);
-      return [px, py];
-    });
-    // Fill polygon
-    setFill([color[0], color[1], color[2]]);
-    doc.setGState(new doc.GState({opacity: 0.15}));
-    var fillPts = [[x, y+h]].concat(pts).concat([[x+w, y+h]]);
-    doc.lines(
-      fillPts.slice(1).map(function(p, i){return [p[0]-fillPts[i][0], p[1]-fillPts[i][1]]}),
-      fillPts[0][0], fillPts[0][1],
-      [1,1], 'F', true
-    );
-    doc.setGState(new doc.GState({opacity: 1}));
-    // Stroke
-    setDraw(color);
-    doc.setLineWidth(0.7);
-    for(var i=1; i<pts.length; i++){
-      doc.line(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1]);
-    }
+  // Word wrap helper
+  function wrapText(text, maxWidth, fontSize){
+    doc.setFontSize(fontSize);
+    return doc.splitTextToSize(clean(text), maxWidth);
   }
 
-  // =====================================================
-  // PAGE 1 — COVER + KPI STRIP
-  // =====================================================
-  drawHeader(1, 5);
+  // ===========================================================
+  // PAGE 1 — COVER + EXECUTIVE SUMMARY
+  // ===========================================================
+  drawPageHeader(1, 5);
+
   var y = 60;
 
-  // Title block — left aligned, no big centered marketing
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(8);
-  setText(P.ink300);
-  doc.text(streamName.toUpperCase() + ' \u00B7 ' + (customer==='ALL'?'PLANT-WIDE':customerName.toUpperCase()), margin, y);
-  y += 18;
-
+  // Big report title block
   doc.setFont('helvetica','bold');
-  doc.setFontSize(22);
-  setText(P.ink900);
-  doc.text(customerName, margin, y);
-  y += 6;
+  doc.setFontSize(9);
+  setText(P.green700);
+  doc.text(clean(streamName).toUpperCase() + '   \u00B7   ' + (customer==='ALL'?'PLANT-WIDE':clean(customerName).toUpperCase()), margin, y);
 
-  // Underline accent
-  setDraw(P.green700);
-  doc.setLineWidth(2);
-  doc.line(margin, y+4, margin+40, y+4);
-  y += 16;
-
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(11);
-  setText(P.ink500);
-  doc.text(range.label, margin, y);
   y += 22;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(28);
+  setText(P.ink900);
+  doc.text(clean(customerName), margin, y);
 
-  // Brief intro paragraph
+  // Yellow accent rule
+  y += 6;
+  setFill(P.yellow500);
+  doc.rect(margin, y, 50, 3, 'F');
+
+  y += 18;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(13);
+  setText(P.ink500);
+  doc.text(clean(range.label), margin, y);
+
+  y += 22;
   doc.setFont('helvetica','normal');
   doc.setFontSize(9);
-  setText(P.ink500);
-  var intro;
-  if(tab==='bulk'){
-    intro = 'During this reporting period, ' + (customer==='ALL'?'VIRESCO\'s anaerobic digestion facility':customer) +
-      ' processed ' + fmt(summary.gallons, 0) + ' gallons of bulk liquid organics across ' +
-      fmt(summary.loads) + ' loads, avoiding ' + fmt(summary.ghg, 1) + ' Tons of CO\u2082e versus the alternative ' +
-      'fate of lagoon discharge or landfilling. The facility produced approximately ' + fmt(summary.mmbtu, 0) +
-      ' MMBtu of renewable energy and ' + fmt(summary.kwh, 0) + ' kWh of grid-quality electricity.';
-  } else {
-    intro = 'During this reporting period, ' + (customer==='ALL'?'VIRESCO\'s DePak operation':customer) +
-      ' processed ' + fmt(summary.tons, 1) + ' tons of packaged organic waste across ' +
-      fmt(summary.loads) + ' deliveries, avoiding ' + fmt(summary.ghg, 1) + ' Tons of CO\u2082e through ' +
-      'diversion from landfill. The facility produced approximately ' + fmt(summary.mmbtu, 0) +
-      ' MMBtu of renewable energy and recovered ' + fmt(summary.npk, 0) + ' kg of NPK-rich ReNutrient\u00AE digestate fertilizer.';
-  }
-  var splitIntro = doc.splitTextToSize(intro, pageW - 2*margin);
-  doc.text(splitIntro, margin, y);
-  y += splitIntro.length * 12 + 16;
+  setText(P.ink400);
+  doc.text('Generated ' + new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) + '  \u00B7  Prepared by VIRESCO', margin, y);
 
-  // KPI strip — 5 across
-  var kpiW = (pageW - 2*margin - 4) / 5;
-  var kpiH = 64;
+  y += 30;
+
+  // EXECUTIVE SUMMARY section
+  y = sectionBar('Executive Summary', range.compact, y);
+
+  // KPI strip — 3 across, 2 rows for richer layout
+  var kpiW = (contentW - 16) / 3;
+  var kpiH = 70;
   var pl = priorRange ? priorRange.label : null;
 
-  // Build KPI data and sparklines
-  var sparkVal = generateSparkData(records, tab==='bulk'?'gallons':'tons', range);
-
   if(tab==='bulk'){
-    drawKpi(margin + 0*(kpiW+1), y, kpiW, kpiH, 'Gallons', fmtCompact(summary.gallons), '', summary.gallons, priorSummary.gallons, pl, sparkVal, P.green500);
-    drawKpi(margin + 1*(kpiW+1), y, kpiW, kpiH, 'Tons CO2e Avoided', fmt(summary.ghg, 1), '', summary.ghg, priorSummary.ghg, pl, sparkVal, P.green700);
-    drawKpi(margin + 2*(kpiW+1), y, kpiW, kpiH, 'MMBtu Output', fmtCompact(summary.mmbtu), '', summary.mmbtu, priorSummary.mmbtu, pl, sparkVal, P.green700);
-    drawKpi(margin + 3*(kpiW+1), y, kpiW, kpiH, 'kWh Equivalent', fmtCompact(summary.kwh), '', summary.kwh, priorSummary.kwh, pl, sparkVal, P.green700);
-    drawKpi(margin + 4*(kpiW+1), y, kpiW, kpiH, 'Loads', fmt(summary.loads), '', summary.loads, priorSummary.loads, pl, sparkVal.map(function(v){return v>0?1:0}), P.ink300);
+    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH, 'Gallons Processed', fmtCompact(summary.gallons), '', summary.gallons, priorSummary.gallons, pl, P.green500);
+    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH, 'GHG Avoided', fmt(summary.ghg, 1), 'Tons CO2e', summary.ghg, priorSummary.ghg, pl, P.green500);
+    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH, 'Loads', fmt(summary.loads), '', summary.loads, priorSummary.loads, pl, P.green500);
+    y += kpiH + 8;
+    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH, 'Energy Generated', fmtCompact(summary.kwh), 'kWh', summary.kwh, priorSummary.kwh, pl, P.yellow500);
+    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH, 'MMBtu Output', fmt(summary.mmbtu, 0), '', summary.mmbtu, priorSummary.mmbtu, pl, P.yellow500);
+    var avgLoad = summary.loads > 0 ? summary.gallons / summary.loads : 0;
+    var priorAvgLoad = priorSummary.loads > 0 ? priorSummary.gallons / priorSummary.loads : 0;
+    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH, 'Avg Load Size', fmt(avgLoad, 0), 'gal', avgLoad, priorAvgLoad, pl, P.yellow500);
   } else {
-    drawKpi(margin + 0*(kpiW+1), y, kpiW, kpiH, 'Tons Processed', fmt(summary.tons, 1), '', summary.tons, priorSummary.tons, pl, sparkVal, P.green500);
-    drawKpi(margin + 1*(kpiW+1), y, kpiW, kpiH, 'Tons CO2e Avoided', fmt(summary.ghg, 1), '', summary.ghg, priorSummary.ghg, pl, sparkVal, P.green700);
-    drawKpi(margin + 2*(kpiW+1), y, kpiW, kpiH, 'MMBtu Output', fmtCompact(summary.mmbtu), '', summary.mmbtu, priorSummary.mmbtu, pl, sparkVal, P.green700);
-    drawKpi(margin + 3*(kpiW+1), y, kpiW, kpiH, 'kWh Equivalent', fmtCompact(summary.kwh), '', summary.kwh, priorSummary.kwh, pl, sparkVal, P.green700);
-    drawKpi(margin + 4*(kpiW+1), y, kpiW, kpiH, 'Loads', fmt(summary.loads), '', summary.loads, priorSummary.loads, pl, sparkVal.map(function(v){return v>0?1:0}), P.ink300);
+    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH, 'Tons Processed', fmt(summary.tons, 1), '', summary.tons, priorSummary.tons, pl, P.green500);
+    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH, 'GHG Avoided', fmt(summary.ghg, 1), 'Tons CO2e', summary.ghg, priorSummary.ghg, pl, P.green500);
+    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH, 'Loads', fmt(summary.loads), '', summary.loads, priorSummary.loads, pl, P.green500);
+    y += kpiH + 8;
+    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH, 'Energy Generated', fmtCompact(summary.kwh), 'kWh', summary.kwh, priorSummary.kwh, pl, P.yellow500);
+    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH, 'NPK Fertilizer', fmt(summary.npk, 0), 'kg', summary.npk, priorSummary.npk, pl, P.yellow500);
+    var avgLoadT = summary.loads > 0 ? summary.tons / summary.loads : 0;
+    var priorAvgLoadT = priorSummary.loads > 0 ? priorSummary.tons / priorSummary.loads : 0;
+    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH, 'Avg Load Size', fmt(avgLoadT, 2), 'tons', avgLoadT, priorAvgLoadT, pl, P.yellow500);
   }
   y += kpiH + 18;
 
-  // Operational summary table (left) + Sustainability KPIs (right)
-  var halfW = (pageW - 2*margin - 12) / 2;
-
-  // LEFT: Operational summary
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(9);
-  setText(P.ink900);
-  doc.text('OPERATIONAL SUMMARY', margin, y);
-  setDraw(P.line300);
-  doc.setLineWidth(0.5);
-  doc.line(margin, y+4, margin+halfW, y+4);
-
-  var opsRows = [];
-  opsRows.push(['Reporting period', range.compact]);
-  opsRows.push(['Filter', customerName]);
-  opsRows.push(['Total ' + (tab==='bulk'?'loads':'deliveries'), fmt(summary.loads)]);
-  if(tab==='bulk'){
-    opsRows.push(['Average load size', fmt(summary.gallons/(summary.loads||1), 0) + ' gal']);
-    var maxLoad = records.reduce(function(a,b){return a.gallons>b.gallons?a:b}, {gallons:0});
-    if(maxLoad.gallons) opsRows.push(['Largest load', fmt(maxLoad.gallons, 0)+' gal']);
-  } else {
-    opsRows.push(['Average load size', fmt(summary.tons/(summary.loads||1), 2) + ' tons']);
-    var maxLoad = records.reduce(function(a,b){return a.tons>b.tons?a:b}, {tons:0});
-    if(maxLoad.tons) opsRows.push(['Largest load', fmt(maxLoad.tons, 2)+' tons']);
-  }
+  // Narrative paragraph
+  setFill(P.green50);
+  // Pre-compute height
+  var narrativeText;
   var uniqueDays = new Set(records.map(function(r){return r.date.toISOString().split('T')[0]})).size;
-  var totalDays = Math.ceil((range.end - range.start) / 86400000);
-  opsRows.push(['Active days', uniqueDays + ' of ' + totalDays]);
-
-  doc.autoTable({
-    startY: y + 8,
-    head: [],
-    body: opsRows,
-    margin: {left: margin, right: pageW - margin - halfW},
-    tableWidth: halfW,
-    theme: 'plain',
-    styles: {fontSize:8, cellPadding:{top:4,bottom:4,left:0,right:0}, lineColor:P.line100, lineWidth:0.5},
-    columnStyles: {
-      0: {cellWidth: halfW*0.55, textColor: P.ink300},
-      1: {cellWidth: halfW*0.45, halign:'right', fontStyle:'bold', textColor: P.ink700}
-    },
-    didDrawCell: function(data){
-      if(data.row.index < opsRows.length-1){
-        doc.setDrawColor(P.line100[0],P.line100[1],P.line100[2]);
-        doc.setLineWidth(0.5);
-        doc.line(data.cell.x, data.cell.y+data.cell.height, data.cell.x+data.cell.width, data.cell.y+data.cell.height);
-      }
-    }
-  });
-
-  // RIGHT: Sustainability summary
-  var rightX = margin + halfW + 12;
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(9);
-  setText(P.ink900);
-  doc.text('SUSTAINABILITY IMPACT', rightX, y);
-  setDraw(P.line300);
-  doc.setLineWidth(0.5);
-  doc.line(rightX, y+4, rightX+halfW, y+4);
-
-  var susRows = [];
-  susRows.push(['Cars off road (1 month)', fmt(summary.cars, 0)]);
-  susRows.push(['Tree-years sequestered', fmt(summary.trees, 0)]);
-  susRows.push(['Households powered (1 mo)', fmt(summary.households, 1)]);
-  susRows.push(['Vehicle miles avoided', fmt(summary.miles, 0)]);
+  var totalDays = Math.max(1, Math.ceil((range.end - range.start) / 86400000));
   if(tab==='bulk'){
-    susRows.push(['Carbon processed', fmt(summary.lbsCarbon, 0) + ' lbs']);
-    susRows.push(['ReNutrient\u00AE digestate', fmt(summary.digestate_gal, 0) + ' gal']);
+    var avgPerDay = uniqueDays > 0 ? summary.gallons / uniqueDays : 0;
+    var topV = (function(){
+      var by = {};
+      records.forEach(function(r){by[r.vendor] = (by[r.vendor]||0) + r.gallons});
+      var sorted = Object.entries(by).sort(function(a,b){return b[1]-a[1]});
+      return sorted.length ? sorted[0] : null;
+    })();
+    narrativeText = 'During the reporting period of ' + clean(range.label.replace(/Lifetime \(|\)$/g, '')) +
+      ', ' + (customer==='ALL' ? 'VIRESCO\'s anaerobic digestion facility' : clean(customer)) +
+      ' processed ' + fmt(summary.gallons, 0) + ' gallons of bulk liquid organics across ' +
+      fmt(summary.loads) + ' loads, achieving an average daily throughput of ' + fmt(avgPerDay, 0) +
+      ' gallons across ' + uniqueDays + ' active days. Anaerobic digestion of this volume avoided ' +
+      fmt(summary.ghg, 1) + ' Tons of CO2e versus the alternative fate of lagoon discharge or landfilling, ' +
+      'while generating ' + fmt(summary.mmbtu, 0) + ' MMBtu of methane-rich biogas converted into ' +
+      fmt(summary.kwh, 0) + ' kWh of grid-quality renewable electricity. ';
+    if(customer === 'ALL' && topV){
+      narrativeText += 'The largest contributing vendor during this period was ' + clean(topV[0]) +
+        ' at ' + fmt(topV[1], 0) + ' gallons (' + fmt(100*topV[1]/summary.gallons, 1) + '% of total volume). ';
+    }
+    narrativeText += 'All material was processed at the VIRESCO facility in Turtle Lake, Wisconsin, ' +
+      'with approximately ' + fmt(summary.digestate_gal, 0) + ' gallons of ReNutrient liquid digestate ' +
+      'recovered for agricultural fertilizer replacement.';
   } else {
-    susRows.push(['Biogas yield', fmt(summary.m3Biogas, 0) + ' m\u00B3']);
-    susRows.push(['ReNutrient\u00AE NPK', fmt(summary.npk, 0) + ' kg']);
+    var avgPerDayT = uniqueDays > 0 ? summary.tons / uniqueDays : 0;
+    var topC = (function(){
+      var by = {};
+      records.forEach(function(r){by[r.customer] = (by[r.customer]||0) + r.tons});
+      var sorted = Object.entries(by).sort(function(a,b){return b[1]-a[1]});
+      return sorted.length ? sorted[0] : null;
+    })();
+    narrativeText = 'During the reporting period of ' + clean(range.label.replace(/Lifetime \(|\)$/g, '')) +
+      ', ' + (customer==='ALL' ? 'VIRESCO\'s DePak operation' : clean(customer)) +
+      ' processed ' + fmt(summary.tons, 1) + ' tons of packaged organic waste across ' +
+      fmt(summary.loads) + ' deliveries, with an average load size of ' + fmt(avgPerDayT, 2) +
+      ' tons per active day across ' + uniqueDays + ' operating days. Diversion from landfill ' +
+      'avoided ' + fmt(summary.ghg, 1) + ' Tons of CO2e while producing ' + fmt(summary.mmbtu, 0) +
+      ' MMBtu of biogas (' + fmt(summary.kwh, 0) + ' kWh equivalent) and ' + fmt(summary.npk, 0) +
+      ' kg of NPK-rich digestate fertilizer. ';
+    if(customer === 'ALL' && topC){
+      narrativeText += 'The largest contributor was ' + clean(topC[0]) +
+        ' at ' + fmt(topC[1], 1) + ' tons (' + fmt(100*topC[1]/summary.tons, 1) + '% of total tonnage). ';
+    }
+    narrativeText += 'Material was processed at the VIRESCO facility in Turtle Lake, Wisconsin.';
   }
 
-  doc.autoTable({
-    startY: y + 8,
-    head: [],
-    body: susRows,
-    margin: {left: rightX, right: margin},
-    tableWidth: halfW,
-    theme: 'plain',
-    styles: {fontSize:8, cellPadding:{top:4,bottom:4,left:0,right:0}, lineColor:P.line100, lineWidth:0.5},
-    columnStyles: {
-      0: {cellWidth: halfW*0.6, textColor: P.ink300},
-      1: {cellWidth: halfW*0.4, halign:'right', fontStyle:'bold', textColor: P.ink700}
-    },
-    didDrawCell: function(data){
-      if(data.row.index < susRows.length-1){
-        doc.setDrawColor(P.line100[0],P.line100[1],P.line100[2]);
-        doc.setLineWidth(0.5);
-        doc.line(data.cell.x, data.cell.y+data.cell.height, data.cell.x+data.cell.width, data.cell.y+data.cell.height);
-      }
+  var narrativeLines = wrapText(narrativeText, contentW - 24, 9.5);
+  var narrativeH = narrativeLines.length * 13 + 20;
+  setFill(P.green50);
+  doc.rect(margin, y, contentW, narrativeH, 'F');
+  setFill(P.green700);
+  doc.rect(margin, y, 3, narrativeH, 'F');
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9.5);
+  setText(P.ink700);
+  doc.text(narrativeLines, margin + 14, y + 14);
+
+  y += narrativeH + 16;
+
+  // If we have room, add a quick monthly bar inline on page 1 (skip if too low)
+  if(y < pageH - 200){
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8);
+    setText(P.ink700);
+    doc.text(clean(tab==='bulk'?'VOLUME BY MONTH':'TONNAGE BY MONTH').toUpperCase(), margin, y);
+    setDraw(P.line300);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y + 4, pageW - margin, y + 4);
+    y += 12;
+
+    var monthlyCanvas = document.getElementById('chartMonthly');
+    if(monthlyCanvas && STATE.charts.chartMonthly){
+      try {
+        var img = monthlyCanvas.toDataURL('image/png');
+        var chH = Math.min(140, pageH - y - 60);
+        doc.addImage(img, 'PNG', margin, y, contentW, chH);
+      } catch(e){}
     }
-  });
+  }
 
-  drawFooter(1);
+  drawPageFooter(1);
 
-  // =====================================================
-  // PAGE 2 — VOLUME ANALYTICS (chart + breakdowns)
-  // =====================================================
+  // ===========================================================
+  // PAGE 2 — VOLUME ANALYTICS
+  // ===========================================================
   doc.addPage();
-  drawHeader(2, 5);
-  y = 50;
+  drawPageHeader(2, 5);
+  y = 60;
 
-  y = sectionTitle((tab==='bulk' ? 'Volume Analytics' : 'Tonnage Analytics'), y);
-  y = sectionRule(y);
+  y = sectionBar('Volume Analytics', clean(tab==='bulk' ? 'Daily and monthly throughput' : 'Daily and monthly tonnage'), y);
 
   // Daily volume chart
   doc.setFont('helvetica','bold');
   doc.setFontSize(8);
-  setText(P.ink900);
-  doc.text((tab==='bulk' ? 'DAILY VOLUME' : 'DAILY TONS') + ' \u2014 ' + range.compact.toUpperCase(), margin, y);
+  setText(P.ink700);
+  doc.text(clean(tab==='bulk' ? 'DAILY VOLUME' : 'DAILY TONS') + ' \u2014 ' + clean(range.compact).toUpperCase(), margin, y);
   doc.setFont('helvetica','normal');
-  doc.setFontSize(7);
-  setText(P.ink300);
-  doc.text((tab==='bulk' ? 'Gallons received per day' : 'Tons processed per day'), margin, y+10);
+  doc.setFontSize(8);
+  setText(P.ink400);
+  doc.text(clean(tab==='bulk' ? 'Gallons received per day' : 'Tons processed per day'), margin, y + 11);
   y += 18;
 
-  // Capture canvas — wait for chart to be active
   var dailyCanvas = document.getElementById('chartDaily');
   if(dailyCanvas && STATE.charts.chartDaily){
     try {
       var img = dailyCanvas.toDataURL('image/png');
-      doc.addImage(img, 'PNG', margin, y, pageW-2*margin, 160);
-      y += 168;
+      doc.addImage(img, 'PNG', margin, y, contentW, 170);
+      y += 178;
     } catch(e){ y += 8; }
-  } else {
-    y += 8;
   }
 
   // Monthly trend chart
   doc.setFont('helvetica','bold');
   doc.setFontSize(8);
-  setText(P.ink900);
+  setText(P.ink700);
   doc.text('MONTHLY TREND \u2014 LAST 12 MONTHS', margin, y);
   doc.setFont('helvetica','normal');
-  doc.setFontSize(7);
-  setText(P.ink300);
-  doc.text((tab==='bulk' ? 'Total gallons by month' : 'Total tons by month'), margin, y+10);
+  doc.setFontSize(8);
+  setText(P.ink400);
+  doc.text(clean(tab==='bulk' ? 'Total gallons by month' : 'Total tons by month'), margin, y + 11);
   y += 18;
 
-  var monthlyCanvas = document.getElementById('chartMonthly');
-  if(monthlyCanvas && STATE.charts.chartMonthly){
+  var monthlyCanvas2 = document.getElementById('chartMonthly');
+  if(monthlyCanvas2 && STATE.charts.chartMonthly){
     try {
-      var img2 = monthlyCanvas.toDataURL('image/png');
-      doc.addImage(img2, 'PNG', margin, y, pageW-2*margin, 140);
-      y += 148;
+      var img2 = monthlyCanvas2.toDataURL('image/png');
+      doc.addImage(img2, 'PNG', margin, y, contentW, 150);
+      y += 158;
     } catch(e){ y += 8; }
   }
 
-  // Compact stat strip at bottom of volume page
+  // Stat strip
   y += 6;
   setDraw(P.line300);
   doc.setLineWidth(0.5);
-  doc.line(margin, y, pageW-margin, y);
-  y += 10;
+  doc.line(margin, y, pageW - margin, y);
+  y += 12;
 
-  var statW = (pageW - 2*margin) / 4;
+  var statW = contentW / 4;
   function statTile(x, label, value){
     doc.setFont('helvetica','normal');
-    doc.setFontSize(6.5);
-    setText(P.ink300);
-    doc.text(label.toUpperCase(), x, y+6);
+    doc.setFontSize(7);
+    setText(P.ink400);
+    doc.text(clean(label).toUpperCase(), x, y + 6);
     doc.setFont('helvetica','bold');
-    doc.setFontSize(11);
-    setText(P.ink900);
-    doc.text(value, x, y+22);
+    doc.setFontSize(13);
+    setText(P.green900);
+    doc.text(clean(value), x, y + 24);
   }
 
   if(tab==='bulk'){
@@ -3345,7 +3367,7 @@ function _generatePDF(records){
     });
     var peak = Object.values(byDayPeak).reduce(function(a,b){return Math.max(a,b)}, 0);
     statTile(margin, 'Total Gallons', fmt(summary.gallons, 0));
-    statTile(margin + statW, 'Daily Avg (active)', fmt(summary.gallons/(uniqueDays||1), 0));
+    statTile(margin + statW, 'Daily Avg', fmt(uniqueDays > 0 ? summary.gallons/uniqueDays : 0, 0));
     statTile(margin + 2*statW, 'Peak Day', fmt(peak, 0));
     statTile(margin + 3*statW, 'Active Days', uniqueDays + ' of ' + totalDays);
   } else {
@@ -3356,33 +3378,58 @@ function _generatePDF(records){
     });
     var peakD = Object.values(byDayPeakD).reduce(function(a,b){return Math.max(a,b)}, 0);
     statTile(margin, 'Total Tons', fmt(summary.tons, 1));
-    statTile(margin + statW, 'Daily Avg (active)', fmt(summary.tons/(uniqueDays||1), 2));
+    statTile(margin + statW, 'Daily Avg', fmt(uniqueDays > 0 ? summary.tons/uniqueDays : 0, 2));
     statTile(margin + 2*statW, 'Peak Day', fmt(peakD, 2));
     statTile(margin + 3*statW, 'Active Days', uniqueDays + ' of ' + totalDays);
   }
 
-  drawFooter(2);
+  drawPageFooter(2);
 
-  // =====================================================
-  // PAGE 3 — SUSTAINABILITY IMPACT
-  // =====================================================
+  // ===========================================================
+  // PAGE 3 — SUSTAINABILITY IMPACT (with big-number callouts)
+  // ===========================================================
   doc.addPage();
-  drawHeader(3, 5);
-  y = 50;
-  y = sectionTitle('Sustainability Impact', y);
-  y = sectionRule(y);
+  drawPageHeader(3, 5);
+  y = 60;
 
+  y = sectionBar('Sustainability Impact', 'CARB ANDOC + EPA Equivalency Factors', y);
+
+  // Intro narrative
   doc.setFont('helvetica','normal');
-  doc.setFontSize(9);
-  setText(P.ink500);
-  var susIntro = 'Anaerobic digestion of organic waste yields three primary environmental benefits: greenhouse gas avoidance, renewable energy production, and recovery of nutrient-rich digestate for agricultural use. All values are derived from CARB ANDOC and EPA-published equivalency factors.';
-  var splitSus = doc.splitTextToSize(susIntro, pageW-2*margin);
-  doc.text(splitSus, margin, y);
-  y += splitSus.length * 12 + 12;
+  doc.setFontSize(9.5);
+  setText(P.ink700);
+  var susIntro = 'Anaerobic digestion of organic waste yields three primary environmental benefits: greenhouse gas avoidance, ' +
+    'renewable energy production, and recovery of nutrient-rich digestate for agricultural use. The metrics below ' +
+    'translate the ' + (tab==='bulk' ? fmt(summary.gallons, 0) + ' gallons' : fmt(summary.tons, 1) + ' tons') +
+    ' processed during this period into real-world equivalencies using ' +
+    'CARB ANDOC and EPA-published factors.';
+  var susLines = wrapText(susIntro, contentW, 9.5);
+  doc.text(susLines, margin, y);
+  y += susLines.length * 13 + 14;
+
+  // Big-number callouts grid (2x2)
+  var calloutW = (contentW - 12) / 2;
+  var calloutH = 56;
+
+  bigCallout(margin + 0*(calloutW+12), y, calloutW, calloutH, fmt(summary.cars, 0) + ' cars/yr', 'Off the road equivalent', P.green700);
+  bigCallout(margin + 1*(calloutW+12), y, calloutW, calloutH, fmt(summary.trees, 0) + ' trees/yr', 'Equivalent planted', P.green700);
+  y += calloutH + 12;
+  bigCallout(margin + 0*(calloutW+12), y, calloutW, calloutH, fmt(summary.households, 1) + ' homes', 'Powered for one month', P.yellow500);
+  bigCallout(margin + 1*(calloutW+12), y, calloutW, calloutH, fmtCompact(summary.miles) + ' miles', 'Vehicle miles avoided', P.yellow500);
+  y += calloutH + 18;
 
   // Detail table
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  setText(P.ink700);
+  doc.text('DETAILED METRICS', margin, y);
+  y += 6;
+
   var detailRows = [];
-  detailRows.push(['GHG emissions avoided', fmt(summary.ghg, 1) + ' Tons CO\u2082e', 'CARB ANDOC framework, GWP-28']);
+  detailRows.push([clean(tab==='bulk' ? 'Total gallons processed' : 'Total tons processed'),
+    tab==='bulk' ? fmt(summary.gallons, 0) + ' gal' : fmt(summary.tons, 2) + ' tons',
+    'Direct measurement']);
+  detailRows.push(['GHG emissions avoided', fmt(summary.ghg, 1) + ' Tons CO2e', 'CARB ANDOC, GWP-28']);
   if(tab==='bulk'){
     detailRows.push(['Carbon processed', fmt(summary.lbsCarbon, 0) + ' lbs', '@ 20,000 ppm carbon content']);
     detailRows.push(['Biogas yield', fmt(summary.scfBiogas, 0) + ' SCF CH4', '23 SCF/lb C  /  ' + fmt(summary.m3Biogas, 0) + ' m3']);
@@ -3392,40 +3439,35 @@ function _generatePDF(records){
   }
   detailRows.push(['MMBtu output', fmt(summary.mmbtu, 0) + ' MMBtu', '1 SCF CH4 = 1,037 BTU thermal']);
   detailRows.push(['Electricity', fmt(summary.kwh, 0) + ' kWh', '40% biogas-to-energy efficiency']);
-  detailRows.push(['Households powered (1 mo)', fmt(summary.households, 1), '893 kWh/month avg US household']);
-  detailRows.push(['Cars off road (1 mo)', fmt(summary.cars, 0), '0.383 Tons CO2/car/month (EPA)']);
-  detailRows.push(['Tree-years sequestered', fmt(summary.trees, 0), '0.06 Tons CO2e per tree-year']);
-  detailRows.push(['Vehicle miles avoided', fmt(summary.miles, 0), '2,481 miles per Ton CO2e (EPA)']);
   if(tab==='bulk'){
-    detailRows.push(['ReNutrient digestate', fmt(summary.digestate_gal, 0) + ' gal', '~95% of intake recovered as liquid']);
+    detailRows.push(['ReNutrient digestate', fmt(summary.digestate_gal, 0) + ' gal', '~95% of intake recovered']);
   } else {
     detailRows.push(['ReNutrient NPK', fmt(summary.npk, 0) + ' kg', '15 kg NPK per ton (digestate)']);
   }
 
   doc.autoTable({
-    startY: y,
+    startY: y + 4,
     head: [['Metric', 'Value', 'Source / Method']],
     body: detailRows,
     margin: {left: margin, right: margin},
     theme: 'plain',
     headStyles: {
       fillColor: P.green700,
-      textColor: [255,255,255],
+      textColor: P.white,
       fontStyle: 'bold',
-      fontSize: 8,
+      fontSize: 8.5,
       cellPadding: 6,
       halign: 'left'
     },
     bodyStyles: {fontSize: 9, cellPadding: 6, lineColor: P.line300, lineWidth: 0.3},
     columnStyles: {
       0: {cellWidth: 180, textColor: P.ink700},
-      1: {cellWidth: 130, halign: 'right', fontStyle: 'bold', textColor: P.ink900},
-      2: {textColor: P.ink300, fontSize: 8}
+      1: {cellWidth: 130, halign: 'right', fontStyle: 'bold', textColor: P.green900},
+      2: {textColor: P.ink400, fontSize: 8}
     },
-    alternateRowStyles: {fillColor: [251, 252, 251]},
+    alternateRowStyles: {fillColor: P.line100},
     didDrawCell: function(data){
       if(data.section==='body'){
-        // Add bottom border to each row
         doc.setDrawColor(P.line300[0],P.line300[1],P.line300[2]);
         doc.setLineWidth(0.3);
         doc.line(data.cell.x, data.cell.y+data.cell.height, data.cell.x+data.cell.width, data.cell.y+data.cell.height);
@@ -3433,43 +3475,45 @@ function _generatePDF(records){
     }
   });
 
-  y = doc.lastAutoTable.finalY + 14;
+  // Methodology callout at bottom
+  var methY = doc.lastAutoTable.finalY + 14;
+  if(methY < pageH - 100){
+    setFill(P.yellow50);
+    doc.rect(margin, methY, contentW, 60, 'F');
+    setFill(P.yellow500);
+    doc.rect(margin, methY, 3, 60, 'F');
 
-  // Methodology callout
-  setFill(P.green50);
-  doc.rect(margin, y, pageW-2*margin, 50, 'F');
-  setFill(P.green700);
-  doc.rect(margin, y, 2, 50, 'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8);
+    setText(P.ink800);
+    doc.text('METHODOLOGY', margin + 12, methY + 14);
 
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(7);
-  setText(P.green900);
-  doc.text('METHODOLOGY', margin+10, y+12);
-
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(8);
-  setText(P.ink500);
-  var methodText;
-  if(tab==='bulk'){
-    methodText = 'GHG calculated as gallons x 8.34 lbs/gal / 2,000 x 0.62 Tons CO2e/ton (CARB ANDOC: 86.5% ANDOC, 75% LFG capture, GWP-28). Biogas and energy derived from carbon content (20,000 ppm) at 23 SCF CH4/lb carbon and 1.34 kWh/lb carbon (40% genset efficiency baked in).';
-  } else {
-    methodText = 'GHG calculated as tons x 0.62 Tons CO2e/ton (CARB ANDOC). Biogas: 100 m3/ton x 73% digester efficiency = 73 m3 CH4/ton. Energy: m3 x 4 kWh/m3 (40% biogas-to-energy genset efficiency baked in). NPK: 15 kg per ton of digestate (ReNutrient).';
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8.5);
+    setText(P.ink700);
+    var methodText;
+    if(tab==='bulk'){
+      methodText = 'GHG calculated as gallons x 8.34 lbs/gal / 2,000 x 0.62 Tons CO2e/ton (CARB ANDOC: 86.5% ANDOC, 75% LFG capture, GWP-28). ' +
+        'Biogas and energy derived from carbon content (20,000 ppm) at 23 SCF CH4/lb carbon and 1.34 kWh/lb carbon (40% genset efficiency).';
+    } else {
+      methodText = 'GHG calculated as tons x 0.62 Tons CO2e/ton (CARB ANDOC). Biogas: 100 m3/ton x 73% digester efficiency. ' +
+        'Energy: m3 x 4 kWh/m3 (40% biogas-to-energy genset efficiency baked in). NPK: 15 kg per ton of digestate (ReNutrient).';
+    }
+    var methLines = wrapText(methodText, contentW - 24, 8.5);
+    doc.text(methLines, margin + 12, methY + 28);
   }
-  doc.text(methodText, margin+10, y+24, {maxWidth: pageW-2*margin-20});
 
-  drawFooter(3);
+  drawPageFooter(3);
 
-  // =====================================================
-  // PAGE 4 — RANKINGS / CONTEXT
-  // =====================================================
+  // ===========================================================
+  // PAGE 4 — RANKINGS / OPERATIONAL DETAIL
+  // ===========================================================
   doc.addPage();
-  drawHeader(4, 5);
-  y = 50;
+  drawPageHeader(4, 5);
+  y = 60;
 
   if(customer === 'ALL'){
-    // Plant-wide: show full ranking table
-    y = sectionTitle('Top ' + (tab==='bulk'?'Vendors':'Customers'), y);
-    y = sectionRule(y);
+    y = sectionBar('Vendor Performance', clean('Top ' + (tab==='bulk'?'vendors':'customers') + ' by volume'), y);
 
     var allRecsRange = (currentData()||[]).filter(function(r){return r.date>=range.start && r.date<=range.end});
     var priorRecsRange = priorRange ? (currentData()||[]).filter(function(r){return r.date>=priorRange.start && r.date<=priorRange.end}) : [];
@@ -3491,45 +3535,44 @@ function _generatePDF(records){
     var sorted = Object.entries(byCust).sort(function(a,b){return b[1].value-a[1].value});
     var totalVal = sorted.reduce(function(s,e){return s+e[1].value}, 0);
     var totalLoads = sorted.reduce(function(s,e){return s+e[1].loads}, 0);
+    var hasPriorP = priorMeaningful;
 
-    var hasPriorP = !!priorRange;
     var rankBody = sorted.map(function(entry, idx){
       var name = entry[0], val = entry[1].value, loads = entry[1].loads;
       var pct = (val/totalVal)*100;
       var priorVal = byPriorCust[name] || 0;
       var row = [
         (idx+1)+'',
-        name + (name==='DePak'&&tab==='bulk'?'  (internal)':''),
+        clean(name) + (name==='DePak'&&tab==='bulk'?'  (internal)':''),
         tab==='bulk' ? fmt(val,0) : fmt(val,2),
         fmt(pct, 1) + '%',
         loads+''
       ];
       if(hasPriorP){
         var delta = fmtDelta(val, priorVal);
-        row.push(delta.text);
+        row.push(clean(delta.text));
       }
       return row;
     });
-    // Total row
     var totalRow = [
-      {content:'', styles:{fillColor: P.green50}},
-      {content:'Total', styles:{fillColor: P.green50, fontStyle:'bold', textColor: P.green900}},
-      {content: tab==='bulk' ? fmt(totalVal,0) : fmt(totalVal,2), styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: P.green900}},
-      {content:'100%', styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: P.green900}},
-      {content: totalLoads+'', styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: P.green900}}
+      {content:'', styles:{fillColor: P.green100}},
+      {content:'Total', styles:{fillColor: P.green100, fontStyle:'bold', textColor: P.green900}},
+      {content: tab==='bulk' ? fmt(totalVal,0) : fmt(totalVal,2), styles:{fillColor: P.green100, fontStyle:'bold', halign:'right', textColor: P.green900}},
+      {content:'100%', styles:{fillColor: P.green100, fontStyle:'bold', halign:'right', textColor: P.green900}},
+      {content: totalLoads+'', styles:{fillColor: P.green100, fontStyle:'bold', halign:'right', textColor: P.green900}}
     ];
     if(hasPriorP){
       var priorTotal = Object.values(byPriorCust).reduce(function(s,v){return s+v}, 0);
       var totalDeltaP = fmtDelta(totalVal, priorTotal);
-      totalRow.push({content: totalDeltaP.text, styles:{fillColor: P.green50, fontStyle:'bold', halign:'right', textColor: totalDeltaP.dir==='pos'?P.pos:totalDeltaP.dir==='neg'?P.neg:P.ink300}});
+      totalRow.push({content: clean(totalDeltaP.text), styles:{fillColor: P.green100, fontStyle:'bold', halign:'right', textColor: totalDeltaP.dir==='pos'?P.pos:totalDeltaP.dir==='neg'?P.neg:P.ink400}});
     }
     rankBody.push(totalRow);
 
     var unitLabel = tab==='bulk' ? 'Gallons' : 'Tons';
-    var headRow = ['#', (tab==='bulk'?'Vendor':'Customer'), unitLabel, '% of Total', 'Loads'];
-    if(hasPriorP) headRow.push('vs ' + priorRange.label);
+    var headRow = ['#', tab==='bulk'?'Vendor':'Customer', unitLabel, '% of Total', 'Loads'];
+    if(hasPriorP) headRow.push('vs ' + clean(priorRange.label));
     var colStyles = {
-      0: {cellWidth:24, textColor: P.ink300, halign:'center'},
+      0: {cellWidth:24, textColor: P.ink400, halign:'center'},
       1: {cellWidth:160},
       2: {halign:'right', fontStyle:'bold'},
       3: {halign:'right', textColor: P.ink500},
@@ -3543,15 +3586,16 @@ function _generatePDF(records){
       body: rankBody,
       margin: {left: margin, right: margin},
       theme: 'plain',
-      headStyles: {fillColor: P.green700, textColor: [255,255,255], fontStyle:'bold', fontSize:8, cellPadding:6},
+      headStyles: {fillColor: P.green700, textColor: P.white, fontStyle:'bold', fontSize:8.5, cellPadding:6},
       bodyStyles: {fontSize:9, cellPadding:6, lineColor: P.line300, lineWidth:0.3},
+      alternateRowStyles: {fillColor: P.line100},
       columnStyles: colStyles,
       didParseCell: function(data){
         if(data.section==='body' && hasPriorP && data.column.index===5 && data.row.index < rankBody.length-1){
           var txt = data.cell.text[0]||'';
-          if(txt.indexOf('\u25B2')>=0) data.cell.styles.textColor = P.pos;
-          else if(txt.indexOf('\u25BC')>=0) data.cell.styles.textColor = P.neg;
-          else data.cell.styles.textColor = P.ink300;
+          if(txt.indexOf('+')>=0 || txt.indexOf('\u25B2')>=0) data.cell.styles.textColor = P.pos;
+          else if(txt.indexOf('-')>=0 || txt.indexOf('\u25BC')>=0) data.cell.styles.textColor = P.neg;
+          else data.cell.styles.textColor = P.ink400;
         }
       },
       didDrawCell: function(data){
@@ -3563,23 +3607,21 @@ function _generatePDF(records){
       }
     });
   } else {
-    // Customer-specific: show breakdown by strength/units + key dates
-    y = sectionTitle('Detail Breakdown', y);
-    y = sectionRule(y);
+    y = sectionBar('Operational Detail', clean(customer + ' breakdown analysis'), y);
 
-    var halfWp = (pageW - 2*margin - 12) / 2;
+    var halfWp = (contentW - 16) / 2;
 
-    // Left: breakdown
     if(tab==='bulk'){
+      // Strength distribution
       doc.setFont('helvetica','bold');
       doc.setFontSize(8);
-      setText(P.ink900);
+      setText(P.ink700);
       doc.text('STRENGTH DISTRIBUTION', margin, y);
       var byStrength = {};
       records.forEach(function(r){ byStrength[r.strength||'(none)'] = (byStrength[r.strength||'(none)']||0) + r.gallons; });
       var sArr = Object.entries(byStrength).sort(function(a,b){return b[1]-a[1]});
       var tot = summary.gallons || 1;
-      var sBody = sArr.map(function(p){return [p[0], fmt(p[1],0), fmt(100*p[1]/tot,1)+'%']});
+      var sBody = sArr.map(function(p){return [clean(p[0]), fmt(p[1],0), fmt(100*p[1]/tot,1)+'%']});
       doc.autoTable({
         startY: y+8,
         head: [['Strength', 'Gallons', '%']],
@@ -3587,20 +3629,22 @@ function _generatePDF(records){
         margin: {left: margin, right: pageW-margin-halfWp},
         tableWidth: halfWp,
         theme:'plain',
-        headStyles: {fillColor: P.green700, textColor: [255,255,255], fontSize:8, cellPadding:5},
+        headStyles: {fillColor: P.green700, textColor: P.white, fontSize:8, cellPadding:5},
         bodyStyles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
-        columnStyles: {1:{halign:'right'}, 2:{halign:'right'}}
+        alternateRowStyles: {fillColor: P.line100},
+        columnStyles: {1:{halign:'right',fontStyle:'bold'}, 2:{halign:'right'}}
       });
 
+      // Tank routing
       var y2 = doc.lastAutoTable.finalY + 16;
       doc.setFont('helvetica','bold');
       doc.setFontSize(8);
-      setText(P.ink900);
+      setText(P.ink700);
       doc.text('TANK ROUTING', margin, y2);
       var byTank = {};
       records.forEach(function(r){ byTank[r.tank||'(unset)'] = (byTank[r.tank||'(unset)']||0) + r.gallons; });
       var tArr = Object.entries(byTank).sort(function(a,b){return b[1]-a[1]});
-      var tBody = tArr.map(function(p){return ['Tank '+p[0], fmt(p[1],0), fmt(100*p[1]/tot,1)+'%']});
+      var tBody = tArr.map(function(p){return ['Tank '+clean(p[0]), fmt(p[1],0), fmt(100*p[1]/tot,1)+'%']});
       doc.autoTable({
         startY: y2+8,
         head: [['Tank', 'Gallons', '%']],
@@ -3608,14 +3652,15 @@ function _generatePDF(records){
         margin: {left: margin, right: pageW-margin-halfWp},
         tableWidth: halfWp,
         theme:'plain',
-        headStyles: {fillColor: P.green700, textColor: [255,255,255], fontSize:8, cellPadding:5},
+        headStyles: {fillColor: P.green700, textColor: P.white, fontSize:8, cellPadding:5},
         bodyStyles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
-        columnStyles: {1:{halign:'right'}, 2:{halign:'right'}}
+        alternateRowStyles: {fillColor: P.line100},
+        columnStyles: {1:{halign:'right',fontStyle:'bold'}, 2:{halign:'right'}}
       });
     } else {
       doc.setFont('helvetica','bold');
       doc.setFontSize(8);
-      setText(P.ink900);
+      setText(P.ink700);
       doc.text('CONTAINER MIX', margin, y);
       var byUnits = {};
       records.forEach(function(r){ byUnits[r.units||'(unset)'] = (byUnits[r.units||'(unset)']||0) + r.tons; });
@@ -3623,7 +3668,7 @@ function _generatePDF(records){
       var tot = summary.tons || 1;
       var uBody = uArr.map(function(p){
         var n = p[0].length>22 ? p[0].substring(0,20)+'...' : p[0];
-        return [n, fmt(p[1],1), fmt(100*p[1]/tot,1)+'%'];
+        return [clean(n), fmt(p[1],1), fmt(100*p[1]/tot,1)+'%'];
       });
       doc.autoTable({
         startY: y+8,
@@ -3632,17 +3677,18 @@ function _generatePDF(records){
         margin: {left: margin, right: pageW-margin-halfWp},
         tableWidth: halfWp,
         theme:'plain',
-        headStyles: {fillColor: P.green700, textColor: [255,255,255], fontSize:8, cellPadding:5},
+        headStyles: {fillColor: P.green700, textColor: P.white, fontSize:8, cellPadding:5},
         bodyStyles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
-        columnStyles: {1:{halign:'right'}, 2:{halign:'right'}}
+        alternateRowStyles: {fillColor: P.line100},
+        columnStyles: {1:{halign:'right',fontStyle:'bold'}, 2:{halign:'right'}}
       });
     }
 
-    // Right: top products / dates
-    var rightX2 = margin + halfWp + 12;
+    // Right column — Key Activity
+    var rightX2 = margin + halfWp + 16;
     doc.setFont('helvetica','bold');
     doc.setFontSize(8);
-    setText(P.ink900);
+    setText(P.ink700);
     doc.text('KEY ACTIVITY', rightX2, y);
 
     var actRows = [];
@@ -3660,7 +3706,7 @@ function _generatePDF(records){
       var byDriver = {};
       records.forEach(function(r){if(r.driver)byDriver[r.driver]=(byDriver[r.driver]||0)+1});
       var topDriver = Object.entries(byDriver).sort(function(a,b){return b[1]-a[1]})[0];
-      if(topDriver) actRows.push(['Top driver', topDriver[0]+' ('+topDriver[1]+' loads)']);
+      if(topDriver) actRows.push(['Top driver', clean(topDriver[0])+' ('+topDriver[1]+' loads)']);
     } else {
       var maxL = records.reduce(function(a,b){return a.tons>b.tons?a:b}, {tons:0});
       if(maxL.tons){
@@ -3672,12 +3718,11 @@ function _generatePDF(records){
       var topProd = Object.entries(byProd).sort(function(a,b){return b[1]-a[1]})[0];
       if(topProd){
         var pn = topProd[0].length>26 ? topProd[0].substring(0,24)+'...' : topProd[0];
-        actRows.push(['Top product', pn+' ('+fmt(topProd[1],1)+' t)']);
+        actRows.push(['Top product', clean(pn)+' ('+fmt(topProd[1],1)+' t)']);
       }
     }
-    var uniqueDays2 = new Set(records.map(function(r){return r.date.toISOString().split('T')[0]})).size;
-    actRows.push(['Active days', uniqueDays2 + ' of ' + totalDays]);
-    actRows.push(['Avg loads/active day', fmt(records.length/(uniqueDays2||1), 1)]);
+    actRows.push(['Active days', uniqueDays + ' of ' + totalDays]);
+    actRows.push(['Avg loads/active day', fmt(records.length/(uniqueDays||1), 1)]);
 
     doc.autoTable({
       startY: y+8,
@@ -3688,28 +3733,26 @@ function _generatePDF(records){
       theme: 'plain',
       styles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
       columnStyles: {
-        0: {textColor: P.ink300, cellWidth: halfWp*0.5},
-        1: {halign:'right', fontStyle:'bold', textColor: P.ink700}
+        0: {textColor: P.ink400, cellWidth: halfWp*0.5},
+        1: {halign:'right', fontStyle:'bold', textColor: P.green900}
+      },
+      didDrawCell: function(data){
+        doc.setDrawColor(P.line300[0],P.line300[1],P.line300[2]);
+        doc.setLineWidth(0.3);
+        doc.line(data.cell.x, data.cell.y+data.cell.height, data.cell.x+data.cell.width, data.cell.y+data.cell.height);
       }
     });
   }
 
-  drawFooter(4);
+  drawPageFooter(4);
 
-  // =====================================================
-  // PAGE 5 — INTAKE LOG
-  // =====================================================
+  // ===========================================================
+  // PAGE 5+ — INTAKE LOG DETAIL (continues across pages)
+  // ===========================================================
   doc.addPage();
-  drawHeader(5, 5);
-  y = 50;
-  y = sectionTitle('Intake Log Detail', y);
-  y = sectionRule(y);
-
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(8);
-  setText(P.ink300);
-  doc.text(fmt(records.length) + ' records  \u00B7  ' + range.label, margin, y);
-  y += 12;
+  drawPageHeader(5, 5);
+  y = 60;
+  y = sectionBar('Intake Log Detail', fmt(records.length) + ' records  |  ' + clean(range.label.replace(/Lifetime \(|\)$/g,'')), y);
 
   var sortedR = records.slice().sort(function(a,b){return a.date-b.date});
   var logHead, logBody;
@@ -3718,38 +3761,38 @@ function _generatePDF(records){
     logBody = sortedR.map(function(r){
       return [
         r.date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}),
-        r.time || '',
-        r.vendor.length > 18 ? r.vendor.substring(0,16)+'\u2026' : r.vendor,
-        r.strength || '',
-        r.tank || '',
+        clean(r.time || ''),
+        clean(r.vendor.length > 18 ? r.vendor.substring(0,16)+'...' : r.vendor),
+        clean(r.strength || ''),
+        clean(r.tank || ''),
         fmt(r.gallons, 0),
-        r.driver || '',
-        r.ticket || ''
+        clean(r.driver || ''),
+        clean(r.ticket || '')
       ];
     });
     logBody.push([
-      {content: 'Total \u2014 ' + fmt(sortedR.length) + ' loads', colSpan:5, styles:{fontStyle:'bold', fillColor: P.green50, textColor: P.green900}},
-      {content: fmt(summary.gallons, 0), styles:{fontStyle:'bold', fillColor: P.green50, textColor: P.green900, halign:'right'}},
-      {content: '', colSpan:2, styles:{fillColor: P.green50}}
+      {content: 'Total - ' + fmt(sortedR.length) + ' loads', colSpan:5, styles:{fontStyle:'bold', fillColor: P.green100, textColor: P.green900}},
+      {content: fmt(summary.gallons, 0), styles:{fontStyle:'bold', fillColor: P.green100, textColor: P.green900, halign:'right'}},
+      {content: '', colSpan:2, styles:{fillColor: P.green100}}
     ]);
   } else {
     logHead = [['Date', 'Customer', 'Product', 'Weight', 'Qty', 'Units', 'Tons', 'Truck Co.']];
     logBody = sortedR.map(function(r){
       return [
         r.date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}),
-        r.customer.length > 14 ? r.customer.substring(0,12)+'\u2026' : r.customer,
-        (r.product||'').length > 18 ? (r.product||'').substring(0,16)+'\u2026' : (r.product||''),
+        clean(r.customer.length > 14 ? r.customer.substring(0,12)+'...' : r.customer),
+        clean((r.product||'').length > 18 ? (r.product||'').substring(0,16)+'...' : (r.product||'')),
         fmt(r.weight, 0),
         fmt(r.quantity, 0),
-        (r.units||'').length > 10 ? (r.units||'').substring(0,9)+'\u2026' : (r.units||''),
+        clean((r.units||'').length > 10 ? (r.units||'').substring(0,9)+'...' : (r.units||'')),
         fmt(r.tons, 2),
-        (r.truckingCo||'').length > 12 ? (r.truckingCo||'').substring(0,10)+'\u2026' : (r.truckingCo||'')
+        clean((r.truckingCo||'').length > 12 ? (r.truckingCo||'').substring(0,10)+'...' : (r.truckingCo||''))
       ];
     });
     logBody.push([
-      {content: 'Total \u2014 ' + fmt(sortedR.length) + ' loads', colSpan:6, styles:{fontStyle:'bold', fillColor: P.green50, textColor: P.green900}},
-      {content: fmt(summary.tons, 2), styles:{fontStyle:'bold', fillColor: P.green50, textColor: P.green900, halign:'right'}},
-      {content: '', styles:{fillColor: P.green50}}
+      {content: 'Total - ' + fmt(sortedR.length) + ' loads', colSpan:6, styles:{fontStyle:'bold', fillColor: P.green100, textColor: P.green900}},
+      {content: fmt(summary.tons, 2), styles:{fontStyle:'bold', fillColor: P.green100, textColor: P.green900, halign:'right'}},
+      {content: '', styles:{fillColor: P.green100}}
     ]);
   }
 
@@ -3757,56 +3800,58 @@ function _generatePDF(records){
     startY: y,
     head: logHead,
     body: logBody,
-    margin: {left: margin, right: margin},
+    margin: {left: margin, right: margin, top: 60, bottom: 40},
     theme: 'plain',
-    headStyles: {fillColor: P.green700, textColor: [255,255,255], fontSize:7.5, fontStyle:'bold', cellPadding:5},
+    headStyles: {fillColor: P.green700, textColor: P.white, fontSize:7.5, fontStyle:'bold', cellPadding:5},
     bodyStyles: {fontSize:7, cellPadding:3.5, lineColor: P.line300, lineWidth:0.2},
-    alternateRowStyles: {fillColor: [251, 252, 251]},
+    alternateRowStyles: {fillColor: P.line100},
     columnStyles: tab==='bulk' ? {
       5: {halign:'right', fontStyle:'bold'}
     } : {
       3: {halign:'right'}, 4: {halign:'right'}, 6: {halign:'right', fontStyle:'bold'}
     },
     didDrawPage: function(data){
+      var pageNum = data.pageNumber + 4; // pages 5+
+      // Re-draw header/footer for autoTable spawned pages
       if(data.pageNumber > 1){
-        // jsPDF's autoTable spawned a new page — re-draw our header/footer
-        drawHeader(5+data.pageNumber-1, 5+data.pageNumber-1);
-        drawFooter(5+data.pageNumber-1);
+        drawPageHeader(pageNum, pageNum);
+        drawPageFooter(pageNum);
       }
     }
   });
 
-  // Methodology footer block (small — at bottom of last log page)
+  // About-this-report block on the final page
   var finalY = doc.lastAutoTable.finalY + 18;
   if(finalY < pageH - 90){
-    setFill(P.green50);
-    doc.rect(margin, finalY, pageW-2*margin, 60, 'F');
     setFill(P.green700);
-    doc.rect(margin, finalY, 2, 60, 'F');
+    doc.rect(margin, finalY, contentW, 70, 'F');
 
     doc.setFont('helvetica','bold');
-    doc.setFontSize(7);
-    setText(P.green900);
-    doc.text('ABOUT THIS REPORT', margin+10, finalY+12);
+    doc.setFontSize(9);
+    setText(P.white);
+    doc.text('ABOUT THIS REPORT', margin + 14, finalY + 16);
 
     doc.setFont('helvetica','normal');
-    doc.setFontSize(7.5);
-    setText(P.ink500);
-    var aboutText = 'VIRESCO operates a 3.2 MW anaerobic digestion facility in Turtle Lake, Wisconsin, converting bulk liquid and packaged organic waste streams into renewable electricity, ReNutrient digestate fertilizer, and recovered packaging materials. All sustainability calculations use CARB ANDOC and EPA-published equivalency factors and are auditable from the underlying intake data.';
-    doc.text(aboutText, margin+10, finalY+24, {maxWidth: pageW-2*margin-20});
+    doc.setFontSize(8.5);
+    setText(P.green200);
+    var aboutText = 'VIRESCO operates a 3.2 MW anaerobic digestion facility in Turtle Lake, Wisconsin, converting bulk liquid and ' +
+      'packaged organic waste streams into renewable electricity, ReNutrient digestate fertilizer, and recovered packaging materials. ' +
+      'All sustainability calculations use CARB ANDOC and EPA-published equivalency factors and are auditable from the underlying intake data.';
+    var aboutLines = wrapText(aboutText, contentW - 28, 8.5);
+    doc.text(aboutLines, margin + 14, finalY + 30);
 
     doc.setFont('helvetica','bold');
-    doc.setFontSize(7);
-    setText(P.ink700);
-    doc.text('Report ID: ' + reportId, margin+10, finalY+54);
+    doc.setFontSize(7.5);
+    setText(P.yellow300);
+    doc.text('Report ID: ' + reportId, margin + 14, finalY + 62);
   }
 
-  drawFooter(5);
+  drawPageFooter(5);
 
-  // =====================================================
+  // ===========================================================
   // SAVE
-  // =====================================================
-  var fileName = reportTitle + ' \u2014 ' + range.shortLabel + '.pdf';
+  // ===========================================================
+  var fileName = clean(reportTitle) + ' - ' + clean(range.shortLabel) + '.pdf';
   doc.save(fileName);
   showToast('PDF saved: ' + fileName);
 }

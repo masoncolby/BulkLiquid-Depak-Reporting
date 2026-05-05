@@ -2,34 +2,52 @@
 
 Standalone HTML reporting tool for VIRESCO AD LLC's two intake streams: Bulk Liquid (gallons, carbon-content method) and DePak Organics (tons, mass-based). Generates branded customer-specific or plant-wide PDF reports from Excel intake logs — entirely client-side, no backend.
 
-## v3 — Multi-File Consolidated Reporting (May 2026)
+## v4 — Consulting-Grade PDF Rebuild (May 2026)
 
-This release adds the ability to consolidate intake logs across multiple years into single lifetime reports.
+The PDF report has been completely redesigned to match the visual quality and structural rigor of VIRESCO's premium client deliverables (e.g., the Denali Target Midwest Organics report).
 
-- **Multiple files per stream** — upload bulk-2024.xlsx, bulk-2025.xlsx, bulk-2026.xlsx (and so on); the portal merges them into one dataset
-- **Automatic deduplication** — records are deduped by date + vendor/customer + volume (case-insensitive), so accidentally uploading overlapping files won't double-count
-- **File list with remove buttons** — see what's loaded, remove a file with a single click, dataset updates immediately
-- **Lifetime period** — new period button that spans the earliest to latest record across all loaded files. Daily volume chart auto-buckets to monthly when range exceeds 1 year. No period-over-period delta on Lifetime view (nothing to compare to); KPIs show "all-time total" instead.
-- **Name similarity detection** — after upload, the portal scans vendor/customer names for likely duplicates ("Monster Energy" vs "Monster CS", "Pepsi-Cola" vs "Pepsi Cola") and shows a dismissible warning banner with the candidates. The portal won't auto-merge them — that's intentionally a manual decision — but you'll know to clean source files if needed.
+- **Dark green page header bars** (green-900) on every page with VIRESCO branding, stream identifier, and page numbering — replaces the thin top accent
+- **Yellow accent line** below each header bar for brand pop
+- **Section title bars** with green-700 background, white headline, and subtitle on the right (e.g., "EXECUTIVE SUMMARY  /  Apr 2026")
+- **Big-number sustainability callouts** — 4 visual anchor tiles showing real-world equivalencies (cars off road, trees planted, homes powered, miles avoided) with colored accent stripes
+- **Auto-generated narrative paragraphs** below each section title — pulls real numbers from the data and writes contextual prose so reports read like consulting deliverables, not raw exports
+- **Color-coded KPI tiles** in 3x2 grid with green stripes for primary metrics and yellow stripes for operational metrics
+- **Footer with confidentiality marking, customer name, and report ID** on every page
+- **Encoding fixes** — CO2e, m3, CH4 now render cleanly (jsPDF Helvetica WinAnsi limitation worked around)
+- **Smart delta suppression** — when the prior period has no/minimal data, KPIs show "first reporting period" instead of misleading huge percentages
+- **About-this-report block** at the end with VIRESCO facility context
 
-## v2 — Enterprise Dashboard Foundation (May 2026)
+## v3.1 — Vendor Merge Tool
 
-- Inter typography with tabular numerals throughout
-- Period-over-period deltas on every KPI (month vs prior month, quarter vs prior quarter, YTD vs same period last year, annual vs prior year, custom vs equal-length window before)
-- Sparklines on every KPI tile showing trajectory within the selected period
-- Tables for rankings/breakdowns instead of cards (more data density)
-- Inline progress bars in table cells for percentage values
-- Restrained palette — full VIRESCO brand colors used with discipline; semantic green/red only for delta indicators
-- No emojis anywhere
-- 5-page PDF report matching the dashboard aesthetic
+- Merge similar vendor/customer names ("Cady" / "cady", "Northstar Recycling" / "North Star Recycling") via inline merge buttons in the warning banner
+- Choose canonical name (radio: A | B | custom text input)
+- Active merge rules display as chips at the bottom of the banner with one-click undo
+- Session-only — merges reset on page reload
+
+## v3 — Multi-File Consolidated Reporting
+
+- Multiple files per stream — upload bulk-2024.xlsx, bulk-2025.xlsx, bulk-2026.xlsx and they merge automatically
+- Auto-deduplication by date + vendor/customer + volume
+- File list with per-file remove buttons
+- Lifetime period — spans earliest to latest record across all loaded files
+- Daily volume chart auto-buckets to monthly when range exceeds 1 year
+- Name similarity detection (Levenshtein-based)
+
+## v2 — Enterprise Dashboard Foundation
+
+- Inter typography with tabular numerals
+- Period-over-period deltas on every KPI
+- Sparklines on every KPI tile
+- Tables for rankings/breakdowns instead of cards
+- Restrained palette using full VIRESCO brand colors
 
 ## Usage
 
 1. Open `index.html` (or visit the deployed Vercel URL)
-2. For each stream, click "+ Add Bulk Liquid file" or "+ Add DePak file" — you can select multiple files at once. Repeat to add more.
+2. For each stream, click "+ Add Bulk Liquid file" or "+ Add DePak file" — multi-select supported in the picker
 3. Click **Continue to Dashboard** when ready
-4. Select stream tab, customer/vendor filter, and reporting period (Month / Quarter / YTD / Annual / **Lifetime** / Custom)
-5. Browse five dashboard sections: Overview, Sustainability, Operations, Rankings, Intake Log
+4. If the warning banner appears with similar names, click **Merge ->** and choose canonical
+5. Select stream tab, customer/vendor filter, and reporting period (Month / Quarter / YTD / Annual / Lifetime / Custom)
 6. Click **Export PDF** to generate a branded report
 
 ## File Structure
@@ -49,9 +67,9 @@ This release adds the ability to consolidate intake logs across multiple years i
 - NPK: tons x 15 kg
 
 **Bulk Liquid (carbon-content based):**
-- Density: 8.34 lbs/gal · Carbon content: 20,000 ppm
-- Biogas: lbs C x 23 SCF · Energy: lbs C x 1.34 kWh
-- GHG: gal x 8.34 / 2,000 x 0.62 (mass-based, unified across both streams)
+- Density: 8.34 lbs/gal | Carbon content: 20,000 ppm
+- Biogas: lbs C x 23 SCF | Energy: lbs C x 1.34 kWh
+- GHG: gal x 8.34 / 2,000 x 0.62
 - ReNutrient digestate: gallons x 95%
 
 **Universal equivalencies:**
@@ -60,33 +78,16 @@ This release adds the ability to consolidate intake logs across multiple years i
 - Tree-years: Tons CO2e / 0.06
 - Vehicle miles avoided: Tons CO2e x 2,481
 
-## Required Excel Columns
-
-**Bulk Liquid** — `Date`, `Vendor`, `Gallons` (required); `Time`, `Strength`, `Tank`, `Driver`, `Ticket #`, `Special Notes` (optional)
-
-**DePak** — `Date`, `Customer`, `Tons` (required); `Time`, `Product`, `Weight (lbs)`, `Quantity`, `Units`, `Truck #`, `Trucking Company`, `Customer BOL#` (optional)
-
-## Deduplication Rules
-
-When you upload multiple files for the same stream, records are merged with this dedup key:
-- **Bulk Liquid:** `YYYY-MM-DD | vendor (lowercased) | rounded gallons`
-- **DePak:** `YYYY-MM-DD | customer (lowercased) | tons (2 decimals)`
-
-If two records collide on this key, the second one is dropped silently. The merge summary line tells you how many duplicates were removed. Records that legitimately differ (different gallons, different vendor, etc.) are kept independently — no fuzzy matching, only exact-key matching.
-
 ## Deployment
 
 ```bash
 cd viresco-portal
-git init
 git add .
-git commit -m "v3 - multi-file lifetime reporting"
-git branch -M main
-git remote add origin https://github.com/masoncolby/BulkLiquid-DePak-Reporting.git
-git push -u origin main
+git commit -m "v4 - consulting-grade PDF rebuild"
+git push
 ```
 
-Connect the GitHub repo to Vercel for auto-deploy. No build step required — `vercel.json` routes everything to `index.html`.
+Connect the GitHub repo to Vercel for auto-deploy. No build step required.
 
 ## Browser Requirements
 
