@@ -1138,7 +1138,6 @@ function calcBulkLiquid(records){
   var cars = ghg / SF.car_per_month;
   var trees = ghg / SF.tree_per_year;
   var miles = ghg * SF.miles_per_tco2e;
-  var digestate_gal = totalGal * 0.95;
   return {
     loads: records.length,
     gallons: totalGal,
@@ -1153,8 +1152,7 @@ function calcBulkLiquid(records){
     households: households,
     cars: cars,
     trees: trees,
-    miles: miles,
-    digestate_gal: digestate_gal
+    miles: miles
   };
 }
 
@@ -2483,9 +2481,7 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   html += buildKpi('Cars Off Road', fmt(carsAnnual, 0), '/yr', carsAnnual, carsAnnualP, pl, sparkVal, VC.green500);
   html += buildKpi('Tree-Years', fmt(s.trees, 0), '', s.trees, ps.trees, pl, sparkVal, VC.green500);
   html += buildKpi('Homes Powered', fmt(homesAnnual, 0), '/yr', homesAnnual, homesAnnualP, pl, sparkVal, VC.green700);
-  if(tab==='bulk'){
-    html += buildKpi('ReNutrient\u00AE', fmtCompact(s.digestate_gal), 'gal', s.digestate_gal, ps.digestate_gal, pl, sparkVal, VC.yellow500);
-  } else {
+  if(tab==='depak'){
     html += buildKpi('ReNutrient\u00AE NPK', fmtCompact(s.npk), 'kg', s.npk, ps.npk, pl, sparkVal, VC.yellow500);
   }
   document.getElementById('susKpis').innerHTML = html;
@@ -2521,9 +2517,7 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   rows.push(['Cars off road (' + rateLabel + ')', fmt(carsAnnual, 0), '0.383 Tons CO\u2082/car/month (EPA)']);
   rows.push(['Tree-years sequestered', fmt(s.trees, 0), '0.06 Tons CO\u2082e per tree-year']);
   rows.push(['Vehicle miles avoided', fmt(s.miles, 0), '2,481 miles per Ton CO\u2082e (EPA)']);
-  if(tab==='bulk'){
-    rows.push(['ReNutrient\u00AE digestate', fmt(s.digestate_gal, 0) + ' gal', '~95% of intake recovered']);
-  } else {
+  if(tab==='depak'){
     rows.push(['ReNutrient\u00AE NPK', fmt(s.npk, 0) + ' kg', '15 kg NPK per ton (digestate)']);
   }
   var sHtml = '<thead><tr><th>Metric</th><th class="num-th">Value</th><th>Source / Method</th></tr></thead><tbody>';
@@ -2948,14 +2942,12 @@ function _generatePDF(records){
   var customer = STATE.filters.customer;
   var customerName = customer === 'ALL' ? 'VIRESCO Plant-Wide' : customer;
   var streamName = tab === 'bulk' ? 'Bulk Liquid' : 'DePak Organics';
-  var reportTitle = customer === 'ALL'
-    ? 'VIRESCO ' + streamName + ' Performance Report'
-    : customer + ' \u2014 ' + streamName + ' Performance Report';
+  var streamProgramName = tab === 'bulk' ? 'Bulk Liquid Sustainability Program' : 'DePak Organics Program';
   var reportId = (tab==='bulk'?'BL':'DP') + '-' +
     (customer==='ALL' ? 'PLANT' : customer.replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,8)) +
     '-' + new Date().getTime().toString().substring(7);
+  var generatedDate = new Date().toLocaleDateString('en-US',{month:'long', day:'numeric', year:'numeric'});
 
-  // Determine if prior period has meaningful data (>= 5% of current)
   var priorMeaningful = prior && prior.length > 0;
   if(priorMeaningful && tab==='bulk'){
     priorMeaningful = priorSummary.gallons > 0 && priorSummary.gallons >= summary.gallons * 0.05;
@@ -2963,18 +2955,67 @@ function _generatePDF(records){
     priorMeaningful = priorSummary.tons > 0 && priorSummary.tons >= summary.tons * 0.05;
   }
 
-  // VIRESCO palette
+  // Compute period stats used throughout
+  var uniqueDays = new Set(records.map(function(r){return r.date.toISOString().split('T')[0]})).size;
+  var periodDays = Math.max(1, (range.end - range.start) / 86400000);
+  var periodWeeks = periodDays / 7;
+  var annualScale = periodDays >= 365 ? 1.0 : (365 / periodDays);
+
+  // Per-week throughput stats
+  function weeklyBreakdown(){
+    if(records.length === 0) return {avg:0, low:0, high:0, firstHalf:0, secondHalf:0};
+    var byWeek = {};
+    var rangeStart = range.start;
+    records.forEach(function(r){
+      var weekIdx = Math.floor((r.date - rangeStart) / (7 * 86400000));
+      var key = 'w' + weekIdx;
+      if(!byWeek[key]) byWeek[key] = 0;
+      byWeek[key] += (tab==='bulk' ? r.gallons : r.tons);
+    });
+    var weeks = Object.values(byWeek);
+    if(weeks.length === 0) return {avg:0, low:0, high:0, firstHalf:0, secondHalf:0};
+    var sum = weeks.reduce(function(a,b){return a+b}, 0);
+    var avg = sum / weeks.length;
+    var low = Math.min.apply(null, weeks);
+    var high = Math.max.apply(null, weeks);
+    // First half vs second half
+    var midpoint = (range.start.getTime() + range.end.getTime()) / 2;
+    var firstHalf = 0, firstHalfDays = 0, secondHalf = 0, secondHalfDays = 0;
+    var dayMap = {};
+    records.forEach(function(r){
+      var k = r.date.toISOString().split('T')[0];
+      if(!dayMap[k]) dayMap[k] = 0;
+      dayMap[k] += (tab==='bulk' ? r.gallons : r.tons);
+    });
+    Object.keys(dayMap).forEach(function(d){
+      var dt = new Date(d).getTime();
+      if(dt < midpoint){ firstHalf += dayMap[d]; firstHalfDays++; }
+      else { secondHalf += dayMap[d]; secondHalfDays++; }
+    });
+    var totalDayMs = range.end.getTime() - range.start.getTime();
+    var firstHalfWeeks = (totalDayMs / 2) / (7 * 86400000);
+    var secondHalfWeeks = firstHalfWeeks;
+    var firstHalfRate = firstHalfWeeks > 0 ? firstHalf / firstHalfWeeks : 0;
+    var secondHalfRate = secondHalfWeeks > 0 ? secondHalf / secondHalfWeeks : 0;
+    return {avg:avg, low:low, high:high, firstHalfRate:firstHalfRate, secondHalfRate:secondHalfRate};
+  }
+  var weekly = weeklyBreakdown();
+
+  // Annualized projection (extrapolate current rate to a full year)
+  var annualizedTotal = (tab==='bulk' ? summary.gallons : summary.tons) * annualScale;
+
+  // VIRESCO palette - dark greens dominant
   var P = {
-    green900: [26, 61, 51],
+    green900: [21, 50, 42],     // very dark — for header bars (was [26,61,51], slightly darker now)
     green800: [33, 76, 64],
-    green700: [40, 92, 77],
+    green700: [40, 92, 77],     // section bars
     green600: [56, 117, 99],
-    green500: [113, 204, 152],
+    green500: [113, 204, 152],  // accent stripes (primary)
     green300: [168, 224, 188],
-    green200: [200, 232, 213],
-    green100: [230, 242, 236],
-    green50:  [243, 248, 245],
-    yellow500:[237, 224, 75],
+    green200: [200, 232, 213],  // header subtitle text
+    green100: [230, 242, 236],  // callout backgrounds
+    green50:  [243, 248, 245],  // narrative box bg
+    yellow500:[237, 224, 75],   // accent stripes (secondary/operational)
     yellow300:[244, 235, 137],
     yellow100:[250, 246, 212],
     yellow50: [253, 250, 232],
@@ -2996,7 +3037,6 @@ function _generatePDF(records){
   function setText(c){ doc.setTextColor(c[0],c[1],c[2]); }
   function setDraw(c){ doc.setDrawColor(c[0],c[1],c[2]); }
 
-  // Replace special characters that don't render in jsPDF Helvetica WinAnsi
   function clean(s){
     if(!s) return '';
     return String(s)
@@ -3010,39 +3050,50 @@ function _generatePDF(records){
       .replace(/\u201C|\u201D/g, '"');
   }
 
-  // ===========================================================
-  // RECURRING ELEMENTS
-  // ===========================================================
-  function drawPageHeader(pageNum, totalPages){
-    // Dark green header bar at very top
-    setFill(P.green900);
-    doc.rect(0, 0, pageW, 28, 'F');
-
-    // Brand on left
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(11);
-    setText(P.white);
-    doc.text('VIRESCO', margin, 18);
-
-    // Stream identifier
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(9);
-    setText(P.green200);
-    doc.text(clean(streamName) + ' Report', margin + 60, 18);
-
-    // Page number on right
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(9);
-    setText(P.green200);
-    doc.text('Page ' + pageNum + ' of ' + totalPages, pageW - margin, 18, {align:'right'});
-
-    // Thin yellow accent line below header bar
-    setFill(P.yellow500);
-    doc.rect(0, 28, pageW, 1.5, 'F');
+  function fmtCompact(n){
+    if(typeof window.fmtCompact === 'function' && window.fmtCompact !== fmtCompact) return window.fmtCompact(n);
+    if(n == null || isNaN(n)) return '0';
+    if(Math.abs(n) >= 1e6) return (n/1e6).toFixed(2) + 'M';
+    if(Math.abs(n) >= 1e3) return (n/1e3).toFixed(1) + 'K';
+    return Math.round(n).toString();
   }
 
-  function drawPageFooter(pageNum){
-    var y = pageH - 28;
+  // ============================================================
+  // RECURRING PAGE ELEMENTS (header / footer)
+  // ============================================================
+
+  // Top page header bar — large, prominent like Denali's navy bar
+  function drawPageHeader(pageLabel){
+    var h = 32;
+    setFill(P.green900);
+    doc.rect(0, 0, pageW, h, 'F');
+
+    // VIRESCO wordmark (left)
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(13);
+    setText(P.white);
+    doc.text('VIRESCO', margin, 21);
+
+    // Program subtitle (after wordmark)
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(9);
+    setText(P.green200);
+    doc.text(clean(streamProgramName), margin + 75, 21);
+
+    // Page label on right
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(9);
+    setText(P.green200);
+    doc.text(clean(pageLabel), pageW - margin, 21, {align:'right'});
+
+    // Thin yellow accent line beneath
+    setFill(P.yellow500);
+    doc.rect(0, h, pageW, 1.5, 'F');
+  }
+
+  // Footer — clean two-line layout matching Denali style
+  function drawPageFooter(){
+    var y = pageH - 36;
     setDraw(P.line300);
     doc.setLineWidth(0.5);
     doc.line(margin, y, pageW - margin, y);
@@ -3050,27 +3101,23 @@ function _generatePDF(records){
     doc.setFont('helvetica','normal');
     doc.setFontSize(8);
     setText(P.ink400);
-    var leftText = 'VIRESCO  |  ' + clean(streamName) + '  |  Confidential  |  Prepared for ' + clean(customerName);
-    doc.text(leftText, margin, y + 12);
-    doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}), pageW - margin, y + 12, {align:'right'});
+    var leftLine = 'VIRESCO  |  ' + clean(streamName) + '  |  Confidential  |  Prepared by VIRESCO';
+    doc.text(leftLine, pageW / 2, y + 13, {align:'center'});
 
-    doc.setFontSize(7);
+    doc.setFontSize(7.5);
     setText(P.ink300);
-    doc.text(reportId, margin, y + 22);
+    doc.text(generatedDate, pageW / 2, y + 24, {align:'center'});
   }
 
-  // Section title bar — colored band like Denali's "EXECUTIVE SUMMARY" header
+  // Section title bar — colored bar with title left, qualifier right
   function sectionBar(title, subtitle, y){
     var h = 22;
-    // Solid green bar
     setFill(P.green700);
     doc.rect(margin, y, contentW, h, 'F');
-    // Title in white
     doc.setFont('helvetica','bold');
     doc.setFontSize(11);
     setText(P.white);
     doc.text(clean(title).toUpperCase(), margin + 12, y + 14.5);
-    // Subtitle on right
     if(subtitle){
       doc.setFont('helvetica','normal');
       doc.setFontSize(9);
@@ -3080,7 +3127,45 @@ function _generatePDF(records){
     return y + h + 14;
   }
 
-  // Big-number callout (used for sustainability page equivalencies)
+  // KPI tile — Denali-style large card with accent stripe, big number, sub-qualifier
+  // Layout: 3 across, ~80pt tall
+  function drawKpi(x, y, w, h, label, value, valueUnit, subText, accent){
+    setFill(P.line100);
+    doc.rect(x, y, w, h, 'F');
+    setFill(accent || P.green500);
+    doc.rect(x, y, w, 3, 'F');
+
+    // Label (small uppercase)
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.5);
+    setText(P.ink500);
+    doc.text(clean(label).toUpperCase(), x + 12, y + 19);
+
+    // Big number
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(26);
+    setText(P.green900);
+    doc.text(clean(value), x + 12, y + 50);
+
+    // Unit beside the value
+    if(valueUnit){
+      var valW = doc.getTextWidth(clean(value));
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(10);
+      setText(P.ink500);
+      doc.text(clean(valueUnit), x + 12 + valW + 6, y + 50);
+    }
+
+    // Sub-qualifier line (THE Denali touch)
+    if(subText){
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(8);
+      setText(P.ink400);
+      doc.text(clean(subText), x + 12, y + 68);
+    }
+  }
+
+  // Big-number callout for sustainability page (4 squares: cars/trees/homes/miles)
   function bigCallout(x, y, w, h, value, label, accent){
     setFill(P.green100);
     doc.rect(x, y, w, h, 'F');
@@ -3098,273 +3183,293 @@ function _generatePDF(records){
     doc.text(clean(label).toUpperCase(), x + 14, y + 42);
   }
 
-  // KPI tile with colored accent stripe at top
-  function drawKpi(x, y, w, h, label, value, unit, curr, priorVal, priorLabel, accent){
-    // Background
-    setFill(P.line100);
-    doc.rect(x, y, w, h, 'F');
-    // Accent stripe at top
-    setFill(accent || P.green500);
-    doc.rect(x, y, w, 3, 'F');
-
-    // Label
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(7);
-    setText(P.ink500);
-    doc.text(clean(label).toUpperCase(), x + 10, y + 18);
-
-    // Value (large) — slightly bigger, positioned with breathing room
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(22);
-    setText(P.green900);
-    var vy = y + 46;
-    doc.text(clean(value), x + 10, vy);
-
-    // Unit beside value
-    if(unit){
-      var valW = doc.getTextWidth(clean(value));
-      doc.setFont('helvetica','normal');
-      doc.setFontSize(9);
-      setText(P.ink500);
-      doc.text(clean(unit), x + 10 + valW + 5, vy);
-    }
-
-    // Delta line — only shown when prior is meaningful, or "all-time total" for lifetime
-    // For first reporting period (no prior data), simply omit the delta line entirely
-    if(priorLabel && priorMeaningful){
-      var delta = fmtDelta(curr, priorVal);
-      doc.setFont('helvetica','bold');
-      doc.setFontSize(7);
-      var deltaColor = delta.dir==='pos' ? P.pos : delta.dir==='neg' ? P.neg : P.ink400;
-      setText(deltaColor);
-      doc.text(clean(delta.text), x + 10, y + 62);
-      doc.setFont('helvetica','normal');
-      setText(P.ink400);
-      var dw = doc.getTextWidth(clean(delta.text));
-      doc.text('vs ' + clean(priorLabel), x + 10 + dw + 5, y + 62);
-    } else if(!priorLabel){
-      // Lifetime view
-      doc.setFont('helvetica','italic');
-      doc.setFontSize(7);
-      setText(P.ink300);
-      doc.text('all-time total', x + 10, y + 62);
-    }
-    // else: priorLabel exists but priorMeaningful is false (first reporting period) → omit silently
-  }
-
-  // Word wrap helper
   function wrapText(text, maxWidth, fontSize){
     doc.setFontSize(fontSize);
     return doc.splitTextToSize(clean(text), maxWidth);
   }
 
-  // ===========================================================
-  // PAGE 1 — COVER PAGE
-  // Stylistically similar to Denali (dominant top band, large whitespace,
-  // centered title block) but VIRESCO branding throughout. Title format:
-  // "VIRESCO: Bulk Liquid Sustainability Report" or "VIRESCO: DePak Sustainability Report"
-  // ===========================================================
+  // Narrative callout box (light green tinted)
+  function narrativeBox(text, y, fontSize){
+    fontSize = fontSize || 9.5;
+    var lines = wrapText(text, contentW - 28, fontSize);
+    var h = lines.length * 13 + 18;
+    setFill(P.green50);
+    doc.rect(margin, y, contentW, h, 'F');
+    setFill(P.green700);
+    doc.rect(margin, y, 3, h, 'F');
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(fontSize);
+    setText(P.ink700);
+    doc.text(lines, margin + 14, y + 14);
+    return y + h;
+  }
 
-  // ===== TOP BRAND BAND =====
-  // Dark green-900 band covering top ~16% of page
+  // ============================================================
+  // PAGE 1 — COVER
+  // ============================================================
+
+  // Top brand band
   var bandH = 130;
   setFill(P.green900);
   doc.rect(0, 0, pageW, bandH, 'F');
-
-  // Thin yellow accent line at the bottom edge of the band
   setFill(P.yellow500);
   doc.rect(0, bandH, pageW, 2, 'F');
 
-  // VIRESCO wordmark — large, white, top-left
+  // VIRESCO wordmark — large, top-left (Denali-massive)
   doc.setFont('helvetica','bold');
   doc.setFontSize(38);
   setText(P.white);
-  doc.text('VIRESCO', margin, 62);
+  doc.text('VIRESCO', margin, 64);
 
-  // Subtitle on the band — facility identifier
+  // Subtitle on band
   doc.setFont('helvetica','normal');
   doc.setFontSize(12);
   setText(P.green200);
-  doc.text('Anaerobic Digestion  \u00B7  Turtle Lake, Wisconsin', margin, 84);
+  doc.text(clean(streamProgramName), margin, 86);
 
-  // Confidentiality marker on the right side of band
+  // Confidentiality top-right
   doc.setFont('helvetica','bold');
   doc.setFontSize(8);
   setText(P.green200);
-  doc.text('CONFIDENTIAL', pageW - margin, 62, {align:'right'});
+  doc.text('CONFIDENTIAL', pageW - margin, 64, {align:'right'});
   doc.setFont('helvetica','normal');
   doc.setFontSize(8);
   doc.text('For Authorized Recipients Only', pageW - margin, 76, {align:'right'});
 
-  // ===== CENTERED TITLE BLOCK (lower-middle of page, matches Denali's airy layout) =====
-  var titleY = pageH * 0.42;  // ~42% down the page
-
-  // Main report title — large, centered
-  // "VIRESCO: Bulk Liquid Sustainability Report" or "VIRESCO: DePak Sustainability Report"
+  // Centered title block
+  var titleY = pageH * 0.42;
   doc.setFont('helvetica','bold');
   doc.setFontSize(24);
   setText(P.ink900);
-  var titleText = 'VIRESCO: ' + clean(streamName) + ' Sustainability Report';
-  doc.text(titleText, pageW / 2, titleY, {align:'center'});
+  var coverTitle = 'VIRESCO: ' + clean(streamName) + ' Sustainability Report';
+  doc.text(coverTitle, pageW / 2, titleY, {align:'center'});
 
-  // Yellow accent rule centered below the title
+  // Yellow rule
   titleY += 14;
   var ruleW = 60;
   setFill(P.yellow500);
   doc.rect((pageW - ruleW) / 2, titleY, ruleW, 2.5, 'F');
 
-  // Customer / scope name — secondary, accent green
+  // Customer / scope
   titleY += 30;
   doc.setFont('helvetica','normal');
   doc.setFontSize(18);
   setText(P.green700);
   doc.text(clean(customerName), pageW / 2, titleY, {align:'center'});
 
-  // Period range — centered
+  // Period
   titleY += 26;
   doc.setFont('helvetica','normal');
   doc.setFontSize(13);
   setText(P.ink700);
   doc.text(clean(range.label), pageW / 2, titleY, {align:'center'});
 
-  // Generated date — centered, smaller, muted
+  // Generated / Prepared by
   titleY += 30;
   doc.setFont('helvetica','normal');
   doc.setFontSize(10);
   setText(P.ink500);
-  doc.text('Generated: ' + new Date().toLocaleDateString('en-US',{month:'long', day:'numeric', year:'numeric'}), pageW / 2, titleY, {align:'center'});
-
-  // Prepared by VIRESCO — centered
+  doc.text('Generated: ' + generatedDate, pageW / 2, titleY, {align:'center'});
   titleY += 16;
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(10);
-  setText(P.ink500);
   doc.text('Prepared by VIRESCO', pageW / 2, titleY, {align:'center'});
 
-  // ===== BOTTOM CONFIDENTIAL FOOTER =====
-  var confidentialY = pageH - 60;
+  // Bottom confidential
+  var confY = pageH - 60;
   doc.setFont('helvetica','italic');
   doc.setFontSize(9);
   setText(P.ink400);
-  doc.text('Confidential \u2014 For Authorized Recipients Only', pageW / 2, confidentialY, {align:'center'});
-
-  // Tiny report ID / address line below confidential, centered
+  doc.text('Confidential \u2014 For Authorized Recipients Only', pageW / 2, confY, {align:'center'});
   doc.setFont('helvetica','normal');
   doc.setFontSize(7);
   setText(P.ink300);
-  doc.text(reportId + '  \u00B7  465 Western Blvd, Turtle Lake, WI', pageW / 2, confidentialY + 14, {align:'center'});
+  doc.text(reportId + '  \u00B7  465 Western Blvd, Turtle Lake, WI', pageW / 2, confY + 14, {align:'center'});
 
-  // ===========================================================
+  // ============================================================
   // PAGE 2 — EXECUTIVE SUMMARY
-  // ===========================================================
+  // ============================================================
   doc.addPage();
-  drawPageHeader(2, 6);
-
+  drawPageHeader('Page 2 of 6');
   var y = 60;
 
-  // EXECUTIVE SUMMARY section
   y = sectionBar('Executive Summary', range.compact, y);
 
-  // KPI strip — 3 across, 2 rows for richer layout
-  var kpiW = (contentW - 16) / 3;
-  var kpiH = 70;
-  var pl = priorRange ? priorRange.label : null;
+  // 3-across, 2-row KPI grid (Denali-style large tiles)
+  var kpiW = (contentW - 16) / 3;  // 8pt gaps between
+  var kpiH = 82;
 
-  if(tab==='bulk'){
-    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH, 'Gallons Processed', fmtCompact(summary.gallons), '', summary.gallons, priorSummary.gallons, pl, P.green500);
-    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH, 'GHG Avoided', fmt(summary.ghg, 1), 'Tons CO2e', summary.ghg, priorSummary.ghg, pl, P.green500);
-    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH, 'Loads', fmt(summary.loads), '', summary.loads, priorSummary.loads, pl, P.green500);
+  if(tab === 'bulk'){
+    var avgLoadGal = summary.loads > 0 ? summary.gallons / summary.loads : 0;
+    var avgWeekGal = weekly.avg;
+    var weeklyTrendNote = (weekly.firstHalfRate > 0 && weekly.secondHalfRate > 0)
+      ? ('First half: ' + fmtCompact(weekly.firstHalfRate) + ' gal/wk')
+      : 'Weekly throughput';
+
+    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH,
+      'Total Gallons',
+      fmtCompact(summary.gallons),
+      '',
+      fmt(summary.loads) + ' loads, ' + uniqueDays + ' active days',
+      P.green500);
+    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH,
+      'GHG Avoided',
+      fmt(summary.ghg, 1),
+      'Tons CO2e',
+      'CARB ANDOC framework',
+      P.green500);
+    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH,
+      'Energy Generated',
+      fmtCompact(summary.kwh),
+      'kWh',
+      fmt(summary.mmbtu, 0) + ' MMBtu biogas output',
+      P.green500);
+
     y += kpiH + 8;
-    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH, 'Energy Generated', fmtCompact(summary.kwh), 'kWh', summary.kwh, priorSummary.kwh, pl, P.yellow500);
-    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH, 'MMBtu Output', fmt(summary.mmbtu, 0), '', summary.mmbtu, priorSummary.mmbtu, pl, P.yellow500);
-    var avgLoad = summary.loads > 0 ? summary.gallons / summary.loads : 0;
-    var priorAvgLoad = priorSummary.loads > 0 ? priorSummary.gallons / priorSummary.loads : 0;
-    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH, 'Avg Load Size', fmt(avgLoad, 0), 'gal', avgLoad, priorAvgLoad, pl, P.yellow500);
+
+    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH,
+      'Avg Load Size',
+      fmt(avgLoadGal, 0),
+      'gal',
+      'Across ' + fmt(summary.loads) + ' loads',
+      P.yellow500);
+    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH,
+      'Avg Gallons / Week',
+      fmtCompact(avgWeekGal),
+      '',
+      'Low: ' + fmtCompact(weekly.low) + ' | High: ' + fmtCompact(weekly.high),
+      P.yellow500);
+    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH,
+      'Annualized Projection',
+      fmtCompact(annualizedTotal),
+      'gal',
+      periodDays >= 365 ? 'Actual annual rate' : '12-month extrapolation',
+      P.yellow500);
   } else {
-    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH, 'Tons Processed', fmt(summary.tons, 1), '', summary.tons, priorSummary.tons, pl, P.green500);
-    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH, 'GHG Avoided', fmt(summary.ghg, 1), 'Tons CO2e', summary.ghg, priorSummary.ghg, pl, P.green500);
-    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH, 'Loads', fmt(summary.loads), '', summary.loads, priorSummary.loads, pl, P.green500);
-    y += kpiH + 8;
-    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH, 'Energy Generated', fmtCompact(summary.kwh), 'kWh', summary.kwh, priorSummary.kwh, pl, P.yellow500);
-    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH, 'NPK Fertilizer', fmt(summary.npk, 0), 'kg', summary.npk, priorSummary.npk, pl, P.yellow500);
     var avgLoadT = summary.loads > 0 ? summary.tons / summary.loads : 0;
-    var priorAvgLoadT = priorSummary.loads > 0 ? priorSummary.tons / priorSummary.loads : 0;
-    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH, 'Avg Load Size', fmt(avgLoadT, 2), 'tons', avgLoadT, priorAvgLoadT, pl, P.yellow500);
+    var avgWeekT = weekly.avg;
+
+    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH,
+      'Total Tons',
+      fmt(summary.tons, 1),
+      '',
+      'lbs: ' + fmtCompact(summary.tons * 2000),
+      P.green500);
+    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH,
+      'GHG Avoided',
+      fmt(summary.ghg, 1),
+      'Tons CO2e',
+      'CARB ANDOC framework',
+      P.green500);
+    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH,
+      'Energy Generated',
+      fmtCompact(summary.kwh),
+      'kWh',
+      fmt(summary.mmbtu, 0) + ' MMBtu biogas output',
+      P.green500);
+
+    y += kpiH + 8;
+
+    drawKpi(margin + 0*(kpiW+8), y, kpiW, kpiH,
+      'Avg Load Size',
+      fmt(avgLoadT, 2),
+      'tons',
+      'Across ' + fmt(summary.loads) + ' loads',
+      P.yellow500);
+    drawKpi(margin + 1*(kpiW+8), y, kpiW, kpiH,
+      'Avg Tons / Week',
+      fmt(avgWeekT, 1),
+      '',
+      'Low: ' + fmt(weekly.low, 1) + ' | High: ' + fmt(weekly.high, 1),
+      P.yellow500);
+    drawKpi(margin + 2*(kpiW+8), y, kpiW, kpiH,
+      'Annualized Projection',
+      fmtCompact(annualizedTotal),
+      'tons',
+      periodDays >= 365 ? 'Actual annual rate' : '12-month extrapolation',
+      P.yellow500);
   }
   y += kpiH + 18;
 
-  // Narrative paragraph
-  setFill(P.green50);
-  // Pre-compute height
-  var narrativeText;
-  var uniqueDays = new Set(records.map(function(r){return r.date.toISOString().split('T')[0]})).size;
-  var totalDays = Math.max(1, Math.ceil((range.end - range.start) / 86400000));
-  if(tab==='bulk'){
-    var avgPerDay = uniqueDays > 0 ? summary.gallons / uniqueDays : 0;
+  // Narrative paragraph with first-half/second-half trend analysis
+  var narrative;
+  var trendDir = '';
+  if(weekly.firstHalfRate > 0 && weekly.secondHalfRate > 0){
+    var trendDelta = ((weekly.secondHalfRate - weekly.firstHalfRate) / weekly.firstHalfRate) * 100;
+    if(Math.abs(trendDelta) >= 5){
+      trendDir = trendDelta > 0
+        ? 'a ' + fmt(Math.abs(trendDelta), 0) + '% increase in throughput'
+        : 'a ' + fmt(Math.abs(trendDelta), 0) + '% decrease in throughput';
+    } else {
+      trendDir = 'consistent throughput';
+    }
+  }
+
+  if(tab === 'bulk'){
     var topV = (function(){
       var by = {};
       records.forEach(function(r){by[r.vendor] = (by[r.vendor]||0) + r.gallons});
       var sorted = Object.entries(by).sort(function(a,b){return b[1]-a[1]});
       return sorted.length ? sorted[0] : null;
     })();
-    narrativeText = 'During the reporting period of ' + clean(range.label.replace(/Lifetime \(|\)$/g, '')) +
-      ', ' + (customer==='ALL' ? 'VIRESCO\'s anaerobic digestion facility' : clean(customer)) +
+    narrative = 'During the reporting period of ' + clean(range.label.replace(/Lifetime \(|\)$/g, '')) +
+      ', ' + (customer === 'ALL' ? 'VIRESCO\'s anaerobic digestion facility' : clean(customer)) +
       ' processed ' + fmt(summary.gallons, 0) + ' gallons of bulk liquid organics across ' +
-      fmt(summary.loads) + ' loads, achieving an average daily throughput of ' + fmt(avgPerDay, 0) +
-      ' gallons across ' + uniqueDays + ' active days. Anaerobic digestion of this volume avoided ' +
-      fmt(summary.ghg, 1) + ' Tons of CO2e versus the alternative fate of lagoon discharge or landfilling, ' +
-      'while generating ' + fmt(summary.mmbtu, 0) + ' MMBtu of methane-rich biogas converted into ' +
+      fmt(summary.loads) + ' loads, with material delivered on ' + uniqueDays +
+      ' active days during the period. ';
+    if(weekly.firstHalfRate > 0 && weekly.secondHalfRate > 0 && trendDir){
+      narrative += 'Weekly throughput averaged ' + fmtCompact(weekly.avg) + ' gallons, ' +
+        'increasing from ' + fmtCompact(weekly.firstHalfRate) + ' gal/wk in the first half ' +
+        'to ' + fmtCompact(weekly.secondHalfRate) + ' gal/wk in the second half - representing ' +
+        trendDir + '. ';
+    }
+    narrative += 'Anaerobic digestion of this volume avoided ' + fmt(summary.ghg, 1) +
+      ' Tons of CO2e versus the alternative fate of lagoon discharge or landfilling, ' +
+      'and generated ' + fmt(summary.mmbtu, 0) + ' MMBtu of methane-rich biogas converted into ' +
       fmt(summary.kwh, 0) + ' kWh of grid-quality renewable electricity. ';
     if(customer === 'ALL' && topV){
-      narrativeText += 'The largest contributing vendor during this period was ' + clean(topV[0]) +
-        ' at ' + fmt(topV[1], 0) + ' gallons (' + fmt(100*topV[1]/summary.gallons, 1) + '% of total volume). ';
+      narrative += 'The largest contributing vendor was ' + clean(topV[0]) +
+        ' at ' + fmt(topV[1], 0) + ' gallons (' + fmt(100*topV[1]/summary.gallons, 1) + '% of total). ';
     }
-    narrativeText += 'All material was processed at the VIRESCO facility in Turtle Lake, Wisconsin, ' +
-      'with approximately ' + fmt(summary.digestate_gal, 0) + ' gallons of ReNutrient liquid digestate ' +
-      'recovered for agricultural fertilizer replacement.';
+    narrative += 'At the current intake rate, the program is projected to process approximately ' +
+      fmtCompact(annualizedTotal) + ' gallons annually.';
   } else {
-    var avgPerDayT = uniqueDays > 0 ? summary.tons / uniqueDays : 0;
     var topC = (function(){
       var by = {};
       records.forEach(function(r){by[r.customer] = (by[r.customer]||0) + r.tons});
       var sorted = Object.entries(by).sort(function(a,b){return b[1]-a[1]});
       return sorted.length ? sorted[0] : null;
     })();
-    narrativeText = 'During the reporting period of ' + clean(range.label.replace(/Lifetime \(|\)$/g, '')) +
-      ', ' + (customer==='ALL' ? 'VIRESCO\'s DePak operation' : clean(customer)) +
-      ' processed ' + fmt(summary.tons, 1) + ' tons of packaged organic waste across ' +
-      fmt(summary.loads) + ' deliveries, with an average load size of ' + fmt(avgPerDayT, 2) +
-      ' tons per active day across ' + uniqueDays + ' operating days. Diversion from landfill ' +
-      'avoided ' + fmt(summary.ghg, 1) + ' Tons of CO2e while producing ' + fmt(summary.mmbtu, 0) +
-      ' MMBtu of biogas (' + fmt(summary.kwh, 0) + ' kWh equivalent) and ' + fmt(summary.npk, 0) +
-      ' kg of NPK-rich digestate fertilizer. ';
-    if(customer === 'ALL' && topC){
-      narrativeText += 'The largest contributor was ' + clean(topC[0]) +
-        ' at ' + fmt(topC[1], 1) + ' tons (' + fmt(100*topC[1]/summary.tons, 1) + '% of total tonnage). ';
+    narrative = 'During the reporting period of ' + clean(range.label.replace(/Lifetime \(|\)$/g, '')) +
+      ', ' + (customer === 'ALL' ? 'VIRESCO\'s DePak operation' : clean(customer)) +
+      ' processed ' + fmt(summary.tons, 1) + ' tons (' + fmtCompact(summary.tons * 2000) +
+      ' lbs) of packaged organic waste across ' + fmt(summary.loads) + ' deliveries on ' +
+      uniqueDays + ' active days. ';
+    if(weekly.firstHalfRate > 0 && weekly.secondHalfRate > 0 && trendDir){
+      narrative += 'Weekly throughput averaged ' + fmt(weekly.avg, 1) + ' tons, ' +
+        'shifting from ' + fmt(weekly.firstHalfRate, 1) + ' tons/wk in the first half ' +
+        'to ' + fmt(weekly.secondHalfRate, 1) + ' tons/wk in the second half - representing ' +
+        trendDir + '. ';
     }
-    narrativeText += 'Material was processed at the VIRESCO facility in Turtle Lake, Wisconsin.';
+    narrative += 'Diversion from landfill avoided ' + fmt(summary.ghg, 1) +
+      ' Tons of CO2e while producing ' + fmt(summary.mmbtu, 0) + ' MMBtu of biogas (' +
+      fmt(summary.kwh, 0) + ' kWh equivalent) and ' + fmt(summary.npk, 0) +
+      ' kg of NPK-rich digestate. ';
+    if(customer === 'ALL' && topC){
+      narrative += 'The largest contributor was ' + clean(topC[0]) +
+        ' at ' + fmt(topC[1], 1) + ' tons (' + fmt(100*topC[1]/summary.tons, 1) + '% of total). ';
+    }
+    narrative += 'At the current rate, the program is projected to process approximately ' +
+      fmtCompact(annualizedTotal) + ' tons annually.';
   }
 
-  var narrativeLines = wrapText(narrativeText, contentW - 24, 9.5);
-  var narrativeH = narrativeLines.length * 13 + 20;
-  setFill(P.green50);
-  doc.rect(margin, y, contentW, narrativeH, 'F');
-  setFill(P.green700);
-  doc.rect(margin, y, 3, narrativeH, 'F');
+  y = narrativeBox(narrative, y, 9.5);
+  y += 14;
 
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(9.5);
-  setText(P.ink700);
-  doc.text(narrativeLines, margin + 14, y + 14);
-
-  y += narrativeH + 16;
-
-  // If we have room, add a quick monthly bar inline on page 1 (skip if too low)
+  // Monthly chart
   if(y < pageH - 200){
     doc.setFont('helvetica','bold');
     doc.setFontSize(8);
     setText(P.ink700);
-    doc.text(clean(tab==='bulk'?'VOLUME BY MONTH':'TONNAGE BY MONTH').toUpperCase(), margin, y);
+    doc.text(clean(tab==='bulk' ? 'VOLUME BY MONTH' : 'TONNAGE BY MONTH'), margin, y);
     setDraw(P.line300);
     doc.setLineWidth(0.5);
     doc.line(margin, y + 4, pageW - margin, y + 4);
@@ -3374,19 +3479,19 @@ function _generatePDF(records){
     if(monthlyCanvas && STATE.charts.chartMonthly){
       try {
         var img = monthlyCanvas.toDataURL('image/png');
-        var chH = Math.min(140, pageH - y - 60);
+        var chH = Math.min(150, pageH - y - 60);
         doc.addImage(img, 'PNG', margin, y, contentW, chH);
       } catch(e){}
     }
   }
 
-  drawPageFooter(2);
+  drawPageFooter();
 
-  // ===========================================================
-  // PAGE 2 — VOLUME ANALYTICS
-  // ===========================================================
+  // ============================================================
+  // PAGE 3 — VOLUME ANALYTICS
+  // ============================================================
   doc.addPage();
-  drawPageHeader(3, 6);
+  drawPageHeader('Page 3 of 6');
   y = 60;
 
   y = sectionBar('Volume Analytics', clean(tab==='bulk' ? 'Daily and monthly throughput' : 'Daily and monthly tonnage'), y);
@@ -3460,7 +3565,7 @@ function _generatePDF(records){
     statTile(margin, 'Total Gallons', fmt(summary.gallons, 0));
     statTile(margin + statW, 'Daily Avg', fmt(uniqueDays > 0 ? summary.gallons/uniqueDays : 0, 0));
     statTile(margin + 2*statW, 'Peak Day', fmt(peak, 0));
-    statTile(margin + 3*statW, 'Active Days', uniqueDays + ' of ' + totalDays);
+    statTile(margin + 3*statW, 'Active Days', uniqueDays + ' of ' + Math.ceil(periodDays));
   } else {
     var byDayPeakD = {};
     records.forEach(function(r){
@@ -3471,55 +3576,55 @@ function _generatePDF(records){
     statTile(margin, 'Total Tons', fmt(summary.tons, 1));
     statTile(margin + statW, 'Daily Avg', fmt(uniqueDays > 0 ? summary.tons/uniqueDays : 0, 2));
     statTile(margin + 2*statW, 'Peak Day', fmt(peakD, 2));
-    statTile(margin + 3*statW, 'Active Days', uniqueDays + ' of ' + totalDays);
+    statTile(margin + 3*statW, 'Active Days', uniqueDays + ' of ' + Math.ceil(periodDays));
   }
 
-  drawPageFooter(3);
+  drawPageFooter();
 
-  // ===========================================================
-  // PAGE 3 — SUSTAINABILITY IMPACT (with big-number callouts)
-  // ===========================================================
+  // ============================================================
+  // PAGE 4 — SUSTAINABILITY IMPACT
+  // ============================================================
   doc.addPage();
-  drawPageHeader(4, 6);
+  drawPageHeader('Page 4 of 6');
   y = 60;
 
   y = sectionBar('Sustainability Impact', 'CARB ANDOC + EPA Equivalency Factors', y);
 
-  // Intro narrative
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(9.5);
-  setText(P.ink700);
-  var susIntro = 'Anaerobic digestion of organic waste yields three primary environmental benefits: greenhouse gas avoidance, ' +
-    'renewable energy production, and recovery of nutrient-rich digestate for agricultural use. The metrics below ' +
-    'translate the ' + (tab==='bulk' ? fmt(summary.gallons, 0) + ' gallons' : fmt(summary.tons, 1) + ' tons') +
-    ' processed during this period into real-world equivalencies using ' +
-    'CARB ANDOC and EPA-published factors.';
-  var susLines = wrapText(susIntro, contentW, 9.5);
-  doc.text(susLines, margin, y);
-  y += susLines.length * 13 + 14;
-
-  // Big-number callouts grid (2x2)
-  // Annualize the rate-based metrics (cars, trees, households) so they read consistently
-  // regardless of report period. Math: scale by (365 / period_days). Cap at 1.0 for periods
-  // longer than a year (lifetime, multi-year) to show "actual" instead of inflated.
-  var periodDays = Math.max(1, (range.end - range.start) / 86400000);
-  var annualScale = periodDays >= 365 ? 1.0 : (365 / periodDays);
-  var carsAnnual = summary.cars * annualScale;       // cars/year equivalent
-  var treesAnnual = summary.trees;                    // trees is already a tree-year metric, no scaling
-  var homesAnnual = summary.households * annualScale; // households powered for a year equivalent
-  var milesTotal = summary.miles;                     // miles is total — no time component
-
+  // Big-number callouts (annualized rates)
+  var carsAnnual = summary.cars * annualScale;
+  var homesAnnual = summary.households * annualScale;
   var periodLabel = periodDays >= 350 ? 'over the period' : 'annualized rate';
 
   var calloutW = (contentW - 12) / 2;
   var calloutH = 56;
 
-  bigCallout(margin + 0*(calloutW+12), y, calloutW, calloutH, fmt(carsAnnual, 0) + ' cars', 'Off the road for one year (' + periodLabel + ')', P.green700);
-  bigCallout(margin + 1*(calloutW+12), y, calloutW, calloutH, fmt(treesAnnual, 0) + ' trees', 'Tree-years of carbon sequestration', P.green700);
+  bigCallout(margin + 0*(calloutW+12), y, calloutW, calloutH,
+    fmt(carsAnnual, 0) + ' cars/yr', 'Off the road equivalent', P.green700);
+  bigCallout(margin + 1*(calloutW+12), y, calloutW, calloutH,
+    fmt(summary.trees, 0) + ' tree-yrs', 'Carbon sequestration equivalent', P.green700);
   y += calloutH + 12;
-  bigCallout(margin + 0*(calloutW+12), y, calloutW, calloutH, fmt(homesAnnual, 0) + ' homes', 'Powered for one year (' + periodLabel + ')', P.yellow500);
-  bigCallout(margin + 1*(calloutW+12), y, calloutW, calloutH, fmtCompact(milesTotal) + ' miles', 'Vehicle miles avoided (total)', P.yellow500);
-  y += calloutH + 18;
+  bigCallout(margin + 0*(calloutW+12), y, calloutW, calloutH,
+    fmt(homesAnnual, 0) + ' homes', 'Powered for one year (' + periodLabel + ')', P.yellow500);
+  bigCallout(margin + 1*(calloutW+12), y, calloutW, calloutH,
+    fmtCompact(summary.miles) + ' miles', 'Vehicle miles avoided (total)', P.yellow500);
+  y += calloutH + 14;
+
+  // Narrative for environmental impact
+  var susNarrative = 'The environmental impact of the program is substantial and measurable. Diverting ' +
+    (tab==='bulk' ? fmt(summary.gallons, 0) + ' gallons' : fmt(summary.tons, 1) + ' tons') +
+    ' of organic material from landfill through anaerobic digestion avoided an estimated ' +
+    fmt(summary.ghg, 1) + ' Tons of CO2 equivalent emissions - an impact comparable to removing ' +
+    fmt(carsAnnual, 0) + ' passenger vehicles from the road for a full year or planting ' +
+    fmt(summary.trees, 0) + ' mature trees. The digestion process generated ' + fmt(summary.mmbtu, 0) +
+    ' MMBtu of methane-rich biogas, which was converted into ' + fmt(summary.kwh, 0) +
+    ' kWh of clean electricity - enough to power approximately ' + fmt(homesAnnual, 0) +
+    ' average American homes. ';
+  if(tab==='depak'){
+    susNarrative += 'Additionally, the process produced ' + fmt(summary.npk, 0) +
+      ' kg of NPK-rich digestate suitable for agricultural fertilizer replacement.';
+  }
+  y = narrativeBox(susNarrative, y, 9);
+  y += 12;
 
   // Detail table
   doc.setFont('helvetica','bold');
@@ -3542,9 +3647,7 @@ function _generatePDF(records){
   }
   detailRows.push(['MMBtu output', fmt(summary.mmbtu, 0) + ' MMBtu', '1 SCF CH4 = 1,037 BTU thermal']);
   detailRows.push(['Electricity', fmt(summary.kwh, 0) + ' kWh', '40% biogas-to-energy efficiency']);
-  if(tab==='bulk'){
-    detailRows.push(['ReNutrient digestate', fmt(summary.digestate_gal, 0) + ' gal', '~95% of intake recovered']);
-  } else {
+  if(tab==='depak'){
     detailRows.push(['ReNutrient NPK', fmt(summary.npk, 0) + ' kg', '15 kg NPK per ton (digestate)']);
   }
 
@@ -3554,21 +3657,14 @@ function _generatePDF(records){
     body: detailRows,
     margin: {left: margin, right: margin},
     theme: 'plain',
-    headStyles: {
-      fillColor: P.green700,
-      textColor: P.white,
-      fontStyle: 'bold',
-      fontSize: 8.5,
-      cellPadding: 6,
-      halign: 'left'
-    },
-    bodyStyles: {fontSize: 9, cellPadding: 6, lineColor: P.line300, lineWidth: 0.3},
+    headStyles: {fillColor: P.green700, textColor: P.white, fontStyle:'bold', fontSize:8.5, cellPadding:6, halign:'left'},
+    bodyStyles: {fontSize:9, cellPadding:6, lineColor:P.line300, lineWidth:0.3},
     columnStyles: {
-      0: {cellWidth: 180, textColor: P.ink700},
-      1: {cellWidth: 130, halign: 'right', fontStyle: 'bold', textColor: P.green900},
-      2: {textColor: P.ink400, fontSize: 8}
+      0: {cellWidth:180, textColor:P.ink700},
+      1: {cellWidth:130, halign:'right', fontStyle:'bold', textColor:P.green900},
+      2: {textColor:P.ink400, fontSize:8}
     },
-    alternateRowStyles: {fillColor: P.line100},
+    alternateRowStyles: {fillColor:P.line100},
     didDrawCell: function(data){
       if(data.section==='body'){
         doc.setDrawColor(P.line300[0],P.line300[1],P.line300[2]);
@@ -3578,128 +3674,76 @@ function _generatePDF(records){
     }
   });
 
-  // Methodology callout at bottom
-  var methY = doc.lastAutoTable.finalY + 14;
-  if(methY < pageH - 100){
-    setFill(P.yellow50);
-    doc.rect(margin, methY, contentW, 60, 'F');
-    setFill(P.yellow500);
-    doc.rect(margin, methY, 3, 60, 'F');
+  drawPageFooter();
 
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(8);
-    setText(P.ink800);
-    doc.text('METHODOLOGY', margin + 12, methY + 14);
-
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(8.5);
-    setText(P.ink700);
-    var methodText;
-    if(tab==='bulk'){
-      methodText = 'GHG calculated as gallons x 8.34 lbs/gal / 2,000 x 0.62 Tons CO2e/ton (CARB ANDOC: 86.5% ANDOC, 75% LFG capture, GWP-28). ' +
-        'Biogas and energy derived from carbon content (20,000 ppm) at 23 SCF CH4/lb carbon and 1.34 kWh/lb carbon (40% genset efficiency).';
-    } else {
-      methodText = 'GHG calculated as tons x 0.62 Tons CO2e/ton (CARB ANDOC). Biogas: 100 m3/ton x 73% digester efficiency. ' +
-        'Energy: m3 x 4 kWh/m3 (40% biogas-to-energy genset efficiency baked in). NPK: 15 kg per ton of digestate (ReNutrient).';
-    }
-    var methLines = wrapText(methodText, contentW - 24, 8.5);
-    doc.text(methLines, margin + 12, methY + 28);
-  }
-
-  drawPageFooter(4);
-
-  // ===========================================================
-  // PAGE 4 — RANKINGS / OPERATIONAL DETAIL
-  // ===========================================================
+  // ============================================================
+  // PAGE 5 — VENDOR PERFORMANCE / OPERATIONAL DETAIL
+  // ============================================================
   doc.addPage();
-  drawPageHeader(5, 6);
+  drawPageHeader('Page 5 of 6');
   y = 60;
 
   if(customer === 'ALL'){
-    y = sectionBar('Vendor Performance', clean('Top ' + (tab==='bulk'?'vendors':'customers') + ' by volume'), y);
+    y = sectionBar(tab==='bulk' ? 'Vendor Performance Rankings' : 'Customer Performance Rankings',
+      clean('By total ' + (tab==='bulk' ? 'volume' : 'tonnage')), y);
 
     var allRecsRange = (currentData()||[]).filter(function(r){return r.date>=range.start && r.date<=range.end});
-    var priorRecsRange = priorRange ? (currentData()||[]).filter(function(r){return r.date>=priorRange.start && r.date<=priorRange.end}) : [];
-
     var nameField = tab==='bulk' ? 'vendor' : 'customer';
     var valueField = tab==='bulk' ? 'gallons' : 'tons';
 
     var byCust = {};
     allRecsRange.forEach(function(r){
       var k = r[nameField];
-      if(!byCust[k]) byCust[k] = {value:0, loads:0};
+      if(!byCust[k]) byCust[k] = {value:0, loads:0, ghg:0};
       byCust[k].value += r[valueField];
       byCust[k].loads += 1;
-    });
-    var byPriorCust = {};
-    priorRecsRange.forEach(function(r){
-      byPriorCust[r[nameField]] = (byPriorCust[r[nameField]]||0) + r[valueField];
+      byCust[k].ghg += (tab==='bulk'
+        ? r.gallons * 8.34 / 2000 * 0.62
+        : r.tons * 0.62);
     });
     var sorted = Object.entries(byCust).sort(function(a,b){return b[1].value-a[1].value});
     var totalVal = sorted.reduce(function(s,e){return s+e[1].value}, 0);
     var totalLoads = sorted.reduce(function(s,e){return s+e[1].loads}, 0);
-    var hasPriorP = priorMeaningful;
+    var totalGhg = sorted.reduce(function(s,e){return s+e[1].ghg}, 0);
 
     var rankBody = sorted.map(function(entry, idx){
-      var name = entry[0], val = entry[1].value, loads = entry[1].loads;
-      var pct = (val/totalVal)*100;
-      var priorVal = byPriorCust[name] || 0;
-      var row = [
+      var name = entry[0], stats = entry[1];
+      var pct = (stats.value/totalVal)*100;
+      return [
         (idx+1)+'',
-        clean(name) + (name==='DePak'&&tab==='bulk'?'  (internal)':''),
-        tab==='bulk' ? fmt(val,0) : fmt(val,2),
+        clean(name),
+        stats.loads+'',
+        tab==='bulk' ? fmt(stats.value, 0) : fmt(stats.value, 2),
         fmt(pct, 1) + '%',
-        loads+''
+        fmt(stats.ghg, 1)
       ];
-      if(hasPriorP){
-        var delta = fmtDelta(val, priorVal);
-        row.push(clean(delta.text));
-      }
-      return row;
     });
-    var totalRow = [
-      {content:'', styles:{fillColor: P.green100}},
-      {content:'Total', styles:{fillColor: P.green100, fontStyle:'bold', textColor: P.green900}},
-      {content: tab==='bulk' ? fmt(totalVal,0) : fmt(totalVal,2), styles:{fillColor: P.green100, fontStyle:'bold', halign:'right', textColor: P.green900}},
-      {content:'100%', styles:{fillColor: P.green100, fontStyle:'bold', halign:'right', textColor: P.green900}},
-      {content: totalLoads+'', styles:{fillColor: P.green100, fontStyle:'bold', halign:'right', textColor: P.green900}}
-    ];
-    if(hasPriorP){
-      var priorTotal = Object.values(byPriorCust).reduce(function(s,v){return s+v}, 0);
-      var totalDeltaP = fmtDelta(totalVal, priorTotal);
-      totalRow.push({content: clean(totalDeltaP.text), styles:{fillColor: P.green100, fontStyle:'bold', halign:'right', textColor: totalDeltaP.dir==='pos'?P.pos:totalDeltaP.dir==='neg'?P.neg:P.ink400}});
-    }
-    rankBody.push(totalRow);
+    rankBody.push([
+      {content:'', styles:{fillColor:P.green100}},
+      {content:'Total', styles:{fillColor:P.green100, fontStyle:'bold', textColor:P.green900}},
+      {content:totalLoads+'', styles:{fillColor:P.green100, fontStyle:'bold', halign:'right', textColor:P.green900}},
+      {content:tab==='bulk' ? fmt(totalVal, 0) : fmt(totalVal, 2), styles:{fillColor:P.green100, fontStyle:'bold', halign:'right', textColor:P.green900}},
+      {content:'100%', styles:{fillColor:P.green100, fontStyle:'bold', halign:'right', textColor:P.green900}},
+      {content:fmt(totalGhg, 1), styles:{fillColor:P.green100, fontStyle:'bold', halign:'right', textColor:P.green900}}
+    ]);
 
     var unitLabel = tab==='bulk' ? 'Gallons' : 'Tons';
-    var headRow = ['#', tab==='bulk'?'Vendor':'Customer', unitLabel, '% of Total', 'Loads'];
-    if(hasPriorP) headRow.push('vs ' + clean(priorRange.label));
-    var colStyles = {
-      0: {cellWidth:24, textColor: P.ink400, halign:'center'},
-      1: {cellWidth:160},
-      2: {halign:'right', fontStyle:'bold'},
-      3: {halign:'right', textColor: P.ink500},
-      4: {halign:'right', cellWidth:50}
-    };
-    if(hasPriorP) colStyles[5] = {halign:'right', cellWidth:80, fontStyle:'bold'};
-
     doc.autoTable({
       startY: y,
-      head: [headRow],
+      head: [['#', tab==='bulk'?'Vendor':'Customer', 'Loads', unitLabel, '% of Total', 'GHG (tCO2e)']],
       body: rankBody,
       margin: {left: margin, right: margin},
       theme: 'plain',
-      headStyles: {fillColor: P.green700, textColor: P.white, fontStyle:'bold', fontSize:8.5, cellPadding:6},
-      bodyStyles: {fontSize:9, cellPadding:6, lineColor: P.line300, lineWidth:0.3},
-      alternateRowStyles: {fillColor: P.line100},
-      columnStyles: colStyles,
-      didParseCell: function(data){
-        if(data.section==='body' && hasPriorP && data.column.index===5 && data.row.index < rankBody.length-1){
-          var txt = data.cell.text[0]||'';
-          if(txt.indexOf('+')>=0 || txt.indexOf('\u25B2')>=0) data.cell.styles.textColor = P.pos;
-          else if(txt.indexOf('-')>=0 || txt.indexOf('\u25BC')>=0) data.cell.styles.textColor = P.neg;
-          else data.cell.styles.textColor = P.ink400;
-        }
+      headStyles: {fillColor:P.green700, textColor:P.white, fontStyle:'bold', fontSize:8.5, cellPadding:6},
+      bodyStyles: {fontSize:9, cellPadding:6, lineColor:P.line300, lineWidth:0.3},
+      alternateRowStyles: {fillColor:P.line100},
+      columnStyles: {
+        0: {cellWidth:24, textColor:P.ink400, halign:'center'},
+        1: {cellWidth:170},
+        2: {halign:'right', cellWidth:55},
+        3: {halign:'right', fontStyle:'bold'},
+        4: {halign:'right', textColor:P.ink500, cellWidth:65},
+        5: {halign:'right', cellWidth:75}
       },
       didDrawCell: function(data){
         if(data.section==='body' && data.row.index < rankBody.length-1){
@@ -3715,7 +3759,6 @@ function _generatePDF(records){
     var halfWp = (contentW - 16) / 2;
 
     if(tab==='bulk'){
-      // Strength distribution
       doc.setFont('helvetica','bold');
       doc.setFontSize(8);
       setText(P.ink700);
@@ -3731,14 +3774,13 @@ function _generatePDF(records){
         body: sBody,
         margin: {left: margin, right: pageW-margin-halfWp},
         tableWidth: halfWp,
-        theme:'plain',
-        headStyles: {fillColor: P.green700, textColor: P.white, fontSize:8, cellPadding:5},
-        bodyStyles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
-        alternateRowStyles: {fillColor: P.line100},
+        theme: 'plain',
+        headStyles: {fillColor:P.green700, textColor:P.white, fontSize:8, cellPadding:5},
+        bodyStyles: {fontSize:9, cellPadding:5, lineColor:P.line300, lineWidth:0.3},
+        alternateRowStyles: {fillColor:P.line100},
         columnStyles: {1:{halign:'right',fontStyle:'bold'}, 2:{halign:'right'}}
       });
 
-      // Tank routing
       var y2 = doc.lastAutoTable.finalY + 16;
       doc.setFont('helvetica','bold');
       doc.setFontSize(8);
@@ -3754,10 +3796,10 @@ function _generatePDF(records){
         body: tBody,
         margin: {left: margin, right: pageW-margin-halfWp},
         tableWidth: halfWp,
-        theme:'plain',
-        headStyles: {fillColor: P.green700, textColor: P.white, fontSize:8, cellPadding:5},
-        bodyStyles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
-        alternateRowStyles: {fillColor: P.line100},
+        theme: 'plain',
+        headStyles: {fillColor:P.green700, textColor:P.white, fontSize:8, cellPadding:5},
+        bodyStyles: {fontSize:9, cellPadding:5, lineColor:P.line300, lineWidth:0.3},
+        alternateRowStyles: {fillColor:P.line100},
         columnStyles: {1:{halign:'right',fontStyle:'bold'}, 2:{halign:'right'}}
       });
     } else {
@@ -3768,10 +3810,10 @@ function _generatePDF(records){
       var byUnits = {};
       records.forEach(function(r){ byUnits[r.units||'(unset)'] = (byUnits[r.units||'(unset)']||0) + r.tons; });
       var uArr = Object.entries(byUnits).sort(function(a,b){return b[1]-a[1]}).slice(0,8);
-      var tot = summary.tons || 1;
+      var totT = summary.tons || 1;
       var uBody = uArr.map(function(p){
         var n = p[0].length>22 ? p[0].substring(0,20)+'...' : p[0];
-        return [clean(n), fmt(p[1],1), fmt(100*p[1]/tot,1)+'%'];
+        return [clean(n), fmt(p[1],1), fmt(100*p[1]/totT,1)+'%'];
       });
       doc.autoTable({
         startY: y+8,
@@ -3779,10 +3821,10 @@ function _generatePDF(records){
         body: uBody,
         margin: {left: margin, right: pageW-margin-halfWp},
         tableWidth: halfWp,
-        theme:'plain',
-        headStyles: {fillColor: P.green700, textColor: P.white, fontSize:8, cellPadding:5},
-        bodyStyles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
-        alternateRowStyles: {fillColor: P.line100},
+        theme: 'plain',
+        headStyles: {fillColor:P.green700, textColor:P.white, fontSize:8, cellPadding:5},
+        bodyStyles: {fontSize:9, cellPadding:5, lineColor:P.line300, lineWidth:0.3},
+        alternateRowStyles: {fillColor:P.line100},
         columnStyles: {1:{halign:'right',fontStyle:'bold'}, 2:{halign:'right'}}
       });
     }
@@ -3811,10 +3853,10 @@ function _generatePDF(records){
       var topDriver = Object.entries(byDriver).sort(function(a,b){return b[1]-a[1]})[0];
       if(topDriver) actRows.push(['Top driver', clean(topDriver[0])+' ('+topDriver[1]+' loads)']);
     } else {
-      var maxL = records.reduce(function(a,b){return a.tons>b.tons?a:b}, {tons:0});
-      if(maxL.tons){
-        actRows.push(['Largest load', fmt(maxL.tons,2)+' tons']);
-        actRows.push(['Largest load date', fmtDate(maxL.date)]);
+      var maxLT = records.reduce(function(a,b){return a.tons>b.tons?a:b}, {tons:0});
+      if(maxLT.tons){
+        actRows.push(['Largest load', fmt(maxLT.tons,2)+' tons']);
+        actRows.push(['Largest load date', fmtDate(maxLT.date)]);
       }
       var byProd = {};
       records.forEach(function(r){byProd[r.product||'(none)']=(byProd[r.product||'(none)']||0)+r.tons});
@@ -3824,20 +3866,20 @@ function _generatePDF(records){
         actRows.push(['Top product', clean(pn)+' ('+fmt(topProd[1],1)+' t)']);
       }
     }
-    actRows.push(['Active days', uniqueDays + ' of ' + totalDays]);
+    actRows.push(['Active days', uniqueDays + ' of ' + Math.ceil(periodDays)]);
     actRows.push(['Avg loads/active day', fmt(records.length/(uniqueDays||1), 1)]);
 
     doc.autoTable({
       startY: y+8,
       head: [],
       body: actRows,
-      margin: {left: rightX2, right: margin},
+      margin: {left:rightX2, right:margin},
       tableWidth: halfWp,
       theme: 'plain',
-      styles: {fontSize:9, cellPadding:5, lineColor: P.line300, lineWidth:0.3},
+      styles: {fontSize:9, cellPadding:5, lineColor:P.line300, lineWidth:0.3},
       columnStyles: {
-        0: {textColor: P.ink400, cellWidth: halfWp*0.5},
-        1: {halign:'right', fontStyle:'bold', textColor: P.green900}
+        0: {textColor:P.ink400, cellWidth:halfWp*0.5},
+        1: {halign:'right', fontStyle:'bold', textColor:P.green900}
       },
       didDrawCell: function(data){
         doc.setDrawColor(P.line300[0],P.line300[1],P.line300[2]);
@@ -3847,13 +3889,13 @@ function _generatePDF(records){
     });
   }
 
-  drawPageFooter(5);
+  drawPageFooter();
 
-  // ===========================================================
-  // PAGE 5+ — INTAKE LOG DETAIL (continues across pages)
-  // ===========================================================
+  // ============================================================
+  // PAGE 6+ — INTAKE LOG DETAIL
+  // ============================================================
   doc.addPage();
-  drawPageHeader(6, 6);
+  drawPageHeader('Page 6 of 6');
   y = 60;
   y = sectionBar('Intake Log Detail', fmt(records.length) + ' records  |  ' + clean(range.label.replace(/Lifetime \(|\)$/g,'')), y);
 
@@ -3874,9 +3916,9 @@ function _generatePDF(records){
       ];
     });
     logBody.push([
-      {content: 'Total - ' + fmt(sortedR.length) + ' loads', colSpan:5, styles:{fontStyle:'bold', fillColor: P.green100, textColor: P.green900}},
-      {content: fmt(summary.gallons, 0), styles:{fontStyle:'bold', fillColor: P.green100, textColor: P.green900, halign:'right'}},
-      {content: '', colSpan:2, styles:{fillColor: P.green100}}
+      {content:'Total \u2014 ' + fmt(sortedR.length) + ' loads', colSpan:5, styles:{fontStyle:'bold', fillColor:P.green100, textColor:P.green900}},
+      {content:fmt(summary.gallons, 0), styles:{fontStyle:'bold', fillColor:P.green100, textColor:P.green900, halign:'right'}},
+      {content:'', colSpan:2, styles:{fillColor:P.green100}}
     ]);
   } else {
     logHead = [['Date', 'Customer', 'Product', 'Weight', 'Qty', 'Units', 'Tons', 'Truck Co.']];
@@ -3893,9 +3935,9 @@ function _generatePDF(records){
       ];
     });
     logBody.push([
-      {content: 'Total - ' + fmt(sortedR.length) + ' loads', colSpan:6, styles:{fontStyle:'bold', fillColor: P.green100, textColor: P.green900}},
-      {content: fmt(summary.tons, 2), styles:{fontStyle:'bold', fillColor: P.green100, textColor: P.green900, halign:'right'}},
-      {content: '', styles:{fillColor: P.green100}}
+      {content:'Total \u2014 ' + fmt(sortedR.length) + ' loads', colSpan:6, styles:{fontStyle:'bold', fillColor:P.green100, textColor:P.green900}},
+      {content:fmt(summary.tons, 2), styles:{fontStyle:'bold', fillColor:P.green100, textColor:P.green900, halign:'right'}},
+      {content:'', styles:{fillColor:P.green100}}
     ]);
   }
 
@@ -3903,29 +3945,28 @@ function _generatePDF(records){
     startY: y,
     head: logHead,
     body: logBody,
-    margin: {left: margin, right: margin, top: 60, bottom: 40},
+    margin: {left:margin, right:margin, top:60, bottom:50},
     theme: 'plain',
-    headStyles: {fillColor: P.green700, textColor: P.white, fontSize:7.5, fontStyle:'bold', cellPadding:5},
-    bodyStyles: {fontSize:7, cellPadding:3.5, lineColor: P.line300, lineWidth:0.2},
-    alternateRowStyles: {fillColor: P.line100},
+    headStyles: {fillColor:P.green700, textColor:P.white, fontSize:7.5, fontStyle:'bold', cellPadding:5},
+    bodyStyles: {fontSize:7, cellPadding:3.5, lineColor:P.line300, lineWidth:0.2},
+    alternateRowStyles: {fillColor:P.line100},
     columnStyles: tab==='bulk' ? {
       5: {halign:'right', fontStyle:'bold'}
     } : {
       3: {halign:'right'}, 4: {halign:'right'}, 6: {halign:'right', fontStyle:'bold'}
     },
     didDrawPage: function(data){
-      var pageNum = data.pageNumber + 5; // pages 6+
-      // Re-draw header/footer for autoTable spawned pages
       if(data.pageNumber > 1){
-        drawPageHeader(pageNum, pageNum);
-        drawPageFooter(pageNum);
+        var pageNum = 5 + data.pageNumber;
+        drawPageHeader('Page ' + pageNum);
+        drawPageFooter();
       }
     }
   });
 
   // About-this-report block on the final page
   var finalY = doc.lastAutoTable.finalY + 18;
-  if(finalY < pageH - 90){
+  if(finalY < pageH - 100){
     setFill(P.green700);
     doc.rect(margin, finalY, contentW, 70, 'F');
 
@@ -3937,9 +3978,10 @@ function _generatePDF(records){
     doc.setFont('helvetica','normal');
     doc.setFontSize(8.5);
     setText(P.green200);
-    var aboutText = 'VIRESCO operates a 3.2 MW anaerobic digestion facility in Turtle Lake, Wisconsin, converting bulk liquid and ' +
-      'packaged organic waste streams into renewable electricity, ReNutrient digestate fertilizer, and recovered packaging materials. ' +
-      'All sustainability calculations use CARB ANDOC and EPA-published equivalency factors and are auditable from the underlying intake data.';
+    var aboutText = 'VIRESCO operates an anaerobic digestion facility in Turtle Lake, Wisconsin, ' +
+      'converting bulk liquid and packaged organic waste streams into renewable electricity, ' +
+      'recovered packaging materials, and nutrient-rich digestate. All sustainability calculations ' +
+      'use CARB ANDOC and EPA-published equivalency factors and are auditable from the underlying intake data.';
     var aboutLines = wrapText(aboutText, contentW - 28, 8.5);
     doc.text(aboutLines, margin + 14, finalY + 30);
 
@@ -3949,12 +3991,12 @@ function _generatePDF(records){
     doc.text('Report ID: ' + reportId, margin + 14, finalY + 62);
   }
 
-  drawPageFooter(6);
+  drawPageFooter();
 
-  // ===========================================================
+  // ============================================================
   // SAVE
-  // ===========================================================
-  var fileName = clean(reportTitle) + ' - ' + clean(range.shortLabel) + '.pdf';
+  // ============================================================
+  var fileName = (customer === 'ALL' ? 'VIRESCO' : customer) + ' - ' + clean(streamName) + ' Sustainability Report - ' + clean(range.shortLabel) + '.pdf';
   doc.save(fileName);
   showToast('PDF saved: ' + fileName);
 }
