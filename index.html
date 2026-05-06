@@ -1006,13 +1006,14 @@ button,select,input{font-family:inherit;font-size:13px}
 // CONSTANTS & SUSTAINABILITY FACTOR SHEET
 // =============================================================
 var SF = {
-  // DePak (mass-based)
-  ghg_per_ton: 0.62,
+  // DePak (mass-based, landfill avoidance counterfactual)
+  ghg_per_ton_depak: 0.62,          // tCO2e/ton: solid food waste avoided from landfill (CARB ANDOC, GWP-28)
   biogas_m3_per_ton: 100,
   digester_eff: 0.73,
   energy_kwh_per_m3: 4,
   npk_kg_per_ton: 15,
-  // Bulk Liquid (VIRESCO plant-measured biogas yield)
+  // Bulk Liquid (VIRESCO plant-measured biogas yield, land application avoidance counterfactual)
+  ghg_per_ton_bulk: 0.1,            // tCO2e/ton: liquid food waste avoided from land application (low CH4 baseline)
   density_lbs_per_gal: 8.34,
   scf_biogas_per_ton: 1067,         // VIRESCO plant-measured: 1,067 SCF biogas per ton bulk liquid input
   ch4_fraction: 0.60,               // 60% methane composition in biogas (food-waste AD industry standard)
@@ -1143,7 +1144,7 @@ function calcBulkLiquid(records){
   // CH4 produced / 23 SCF/lb = lbs of biodegradable carbon converted
   var lbsCarbon = scfMethane / SF.scf_ch4_per_lb_carbon;
 
-  var ghg = tons * SF.ghg_per_ton;                     // 0.62 tCO2e/ton (with caveat in report)
+  var ghg = tons * SF.ghg_per_ton_bulk;                // 0.075 tCO2e/ton: land-application avoidance
   var households = mmbtu / SF.household_mmbtu_monthly;
   var cars = ghg / SF.car_per_month;
   var trees = ghg / SF.tree_per_year;
@@ -1170,7 +1171,7 @@ function calcDePak(records){
   var totalTons = records.reduce(function(s,r){return s+(r.tons||0)}, 0);
   var totalLbs = records.reduce(function(s,r){return s+(r.weight||0)}, 0);
   var totalQty = records.reduce(function(s,r){return s+(r.quantity||0)}, 0);
-  var ghg = totalTons * SF.ghg_per_ton;
+  var ghg = totalTons * SF.ghg_per_ton_depak;
   var m3Biogas = totalTons * SF.biogas_m3_per_ton * SF.digester_eff;
   var scfBiogas = m3Biogas * SF.m3_to_scf;
   var mmbtu = m3Biogas * SF.m3_to_mmbtu;
@@ -2516,7 +2517,7 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   rows.push([
     tab==='bulk' ? 'GHG emissions diverted \u2020' : 'GHG emissions avoided',
     fmt(s.ghg, 1) + ' Tons CO\u2082e',
-    tab==='bulk' ? 'Estimated, landfill-avoidance modeling' : 'CARB ANDOC framework, GWP-28'
+    tab==='bulk' ? 'Land-application avoidance counterfactual' : 'CARB ANDOC framework, GWP-28'
   ]);
   if(tab==='bulk'){
     rows.push(['Carbon processed', fmt(s.lbsCarbon, 0) + ' lbs', 'Back-derived from biogas yield (~14,000 ppm)']);
@@ -2544,7 +2545,7 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   // Methodology
   var method = '';
   if(tab==='bulk'){
-    method = '<strong>Methodology.</strong> Energy figures derived from VIRESCO plant-measured biogas yield of 1,067 SCF biogas per ton of bulk liquid input, assuming 60% methane composition and 40% biogas-to-electricity genset efficiency. Implied carbon content of approximately 14,000 ppm is back-derived from biogas yield using anaerobic digestion stoichiometry (23 SCF CH\u2084 per lb biodegradable carbon). GHG calculated as gallons \u00D7 8.34 lbs/gal \u00F7 2,000 \u00D7 0.62 Tons CO\u2082e/ton (GWP-28).<br><br><span style="color:var(--ink-300);font-size:11px;font-style:italic">Note on GHG figures: estimated emissions diverted are based on landfill-avoidance modeling. Actual avoided emissions depend on counterfactual disposal pathway and may be lower for land-applied or POTW-treated streams. Subject to revision based on facility-specific measurement.</span>';
+    method = '<strong>Methodology.</strong> Energy figures derived from VIRESCO plant-measured biogas yield of 1,067 SCF biogas per ton of bulk liquid input, assuming 60% methane composition and 40% biogas-to-electricity genset efficiency. Implied carbon content of approximately 14,000 ppm is back-derived from biogas yield using anaerobic digestion stoichiometry (23 SCF CH\u2084 per lb biodegradable carbon). GHG calculated as gallons \u00D7 8.34 lbs/gal \u00F7 2,000 \u00D7 0.1 Tons CO\u2082e/ton, reflecting avoidance of land application as the realistic counterfactual disposal pathway for VIRESCO\'s bulk liquid intake (GWP-28).';
   } else {
     method = '<strong>Methodology.</strong> GHG calculated as tons \u00D7 0.62 Tons CO\u2082e/ton (CARB ANDOC). Biogas: 100 m\u00B3/ton \u00D7 73% digester efficiency = 73 m\u00B3 CH\u2084/ton. Energy: m\u00B3 \u00D7 4 kWh/m\u00B3 (40% genset). NPK: 15 kg/ton (ReNutrient\u00AE).';
   }
@@ -3436,7 +3437,7 @@ function _generatePDF(records){
         trendDir + '. ';
     }
     narrative += 'Anaerobic digestion of this volume avoided ' + fmt(summary.ghg, 1) +
-      ' Tons of CO2e versus the alternative fate of lagoon discharge or landfilling, ' +
+      ' Tons of CO2e versus the alternative fate of land application, ' +
       'and generated ' + fmt(summary.mmbtu, 0) + ' MMBtu of methane-rich biogas converted into ' +
       fmt(summary.kwh, 0) + ' kWh of grid-quality renewable electricity. ';
     if(customer === 'ALL' && topV){
@@ -3624,9 +3625,10 @@ function _generatePDF(records){
   y += calloutH + 14;
 
   // Narrative for environmental impact
+  var altFate = tab==='bulk' ? 'land application' : 'landfill disposal';
   var susNarrative = 'The environmental impact of the program is substantial and measurable. Diverting ' +
     (tab==='bulk' ? fmt(summary.gallons, 0) + ' gallons' : fmt(summary.tons, 1) + ' tons') +
-    ' of organic material from landfill through anaerobic digestion avoided an estimated ' +
+    ' of organic material from ' + altFate + ' to anaerobic digestion avoided an estimated ' +
     fmt(summary.ghg, 1) + ' Tons of CO2 equivalent emissions - an impact comparable to removing ' +
     fmt(carsAnnual, 0) + ' passenger vehicles from the road for a full year or planting ' +
     fmt(summary.trees, 0) + ' mature trees. The digestion process generated ' + fmt(summary.mmbtu, 0) +
@@ -3654,7 +3656,7 @@ function _generatePDF(records){
   detailRows.push([
     tab==='bulk' ? 'GHG emissions diverted \u2020' : 'GHG emissions avoided',
     fmt(summary.ghg, 1) + ' Tons CO2e',
-    tab==='bulk' ? 'Estimated, landfill-avoidance modeling' : 'CARB ANDOC, GWP-28'
+    tab==='bulk' ? 'Land-application avoidance counterfactual' : 'CARB ANDOC, GWP-28'
   ]);
   if(tab==='bulk'){
     detailRows.push(['Carbon processed', fmt(summary.lbsCarbon, 0) + ' lbs', 'Back-derived from biogas yield (~14,000 ppm)']);
@@ -3699,7 +3701,7 @@ function _generatePDF(records){
       doc.setFont('helvetica','italic');
       doc.setFontSize(7.5);
       setText(P.ink400);
-      var caveatText = '\u2020 GHG figures represent estimated emissions diverted under landfill-avoidance modeling. Actual avoided emissions depend on counterfactual disposal pathway and may be lower for land-applied or POTW-treated streams. Energy figures derived from VIRESCO plant-measured biogas yield (1,067 SCF/ton).';
+      var caveatText = '\u2020 GHG figures reflect emissions avoided versus land application, the realistic counterfactual disposal pathway for VIRESCO\'s bulk liquid intake (factor: 0.1 tCO2e/ton). Energy figures derived from VIRESCO plant-measured biogas yield (1,067 SCF/ton liquid input).';
       var caveatLines = wrapText(caveatText, contentW, 7.5);
       doc.text(caveatLines, margin, caveatY);
     }
@@ -3729,8 +3731,8 @@ function _generatePDF(records){
       byCust[k].value += r[valueField];
       byCust[k].loads += 1;
       byCust[k].ghg += (tab==='bulk'
-        ? r.gallons * 8.34 / 2000 * 0.62
-        : r.tons * 0.62);
+        ? r.gallons * SF.density_lbs_per_gal / 2000 * SF.ghg_per_ton_bulk
+        : r.tons * SF.ghg_per_ton_depak);
     });
     var sorted = Object.entries(byCust).sort(function(a,b){return b[1].value-a[1].value});
     var totalVal = sorted.reduce(function(s,e){return s+e[1].value}, 0);

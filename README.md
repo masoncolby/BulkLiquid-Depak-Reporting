@@ -60,18 +60,17 @@ The PDF report has been completely redesigned to match the visual quality and st
 
 ## Sustainability Factor Sheet
 
-**DePak (mass-based):**
-- GHG: tons x 0.62 Tons CO2e/ton (CARB ANDOC)
+**DePak (mass-based, landfill avoidance counterfactual):**
+- GHG: tons x 0.62 Tons CO2e/ton (CARB ANDOC, GWP-28)
 - Biogas: tons x 100 m3 x 73% digester efficiency
 - Energy: m3 x 4 kWh/m3 (40% genset baked in)
 - NPK: tons x 15 kg
 
-**Bulk Liquid (carbon-content based):**
+**Bulk Liquid (plant-measured biogas yield, land application avoidance counterfactual):**
 - Density: 8.34 lbs/gal | Plant-measured biogas yield: 1,067 SCF/ton
 - Methane composition: 60% | Genset efficiency: 40%
 - Implied carbon content (back-derived): ~14,000 ppm
-- GHG: gal x 8.34 / 2,000 x 0.62
-- ReNutrient digestate: gallons x 95%
+- GHG: gal x 8.34 / 2,000 x 0.1 (land-application avoidance, GWP-28)
 
 **Universal equivalencies:**
 - Households powered: MMBtu / 32.7
