@@ -67,8 +67,9 @@ The PDF report has been completely redesigned to match the visual quality and st
 - NPK: tons x 15 kg
 
 **Bulk Liquid (carbon-content based):**
-- Density: 8.34 lbs/gal | Carbon content: 10,000 ppm
-- Biogas: lbs C x 23 SCF | Energy: lbs C x 1.34 kWh
+- Density: 8.34 lbs/gal | Plant-measured biogas yield: 1,067 SCF/ton
+- Methane composition: 60% | Genset efficiency: 40%
+- Implied carbon content (back-derived): ~14,000 ppm
 - GHG: gal x 8.34 / 2,000 x 0.62
 - ReNutrient digestate: gallons x 95%
 

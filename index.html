@@ -1012,15 +1012,17 @@ var SF = {
   digester_eff: 0.73,
   energy_kwh_per_m3: 4,
   npk_kg_per_ton: 15,
-  // Bulk Liquid (carbon-content based)
+  // Bulk Liquid (VIRESCO plant-measured biogas yield)
   density_lbs_per_gal: 8.34,
-  carbon_ppm: 10000,
-  scf_per_lb_carbon: 23,
-  kwh_per_lb_carbon: 1.34,
+  scf_biogas_per_ton: 1067,         // VIRESCO plant-measured: 1,067 SCF biogas per ton bulk liquid input
+  ch4_fraction: 0.60,               // 60% methane composition in biogas (food-waste AD industry standard)
+  genset_efficiency: 0.40,          // 40% biogas-to-electricity conversion
+  scf_ch4_per_lb_carbon: 23,        // stoichiometric: 1 lb biodegradable C → 23 SCF CH4
   // Universal
   scf_to_mmbtu: 0.001037,
   m3_to_scf: 35.3147,
   m3_to_mmbtu: 0.03663,
+  kwh_per_mmbtu: 293.07,
   household_kwh_monthly: 893,
   household_mmbtu_monthly: 32.7,
   car_per_month: 0.383,
@@ -1128,12 +1130,20 @@ function destroyChart(id){
 function calcBulkLiquid(records){
   var totalGal = records.reduce(function(s,r){return s+(r.gallons||0)}, 0);
   var totalLbs = totalGal * SF.density_lbs_per_gal;
-  var lbsCarbon = totalLbs * SF.carbon_ppm / 1000000;
-  var scfBiogas = lbsCarbon * SF.scf_per_lb_carbon;
+  var tons = totalLbs / 2000;
+
+  // Plant-measured biogas yield: 1,067 SCF biogas per ton liquid input
+  var scfBiogas = tons * SF.scf_biogas_per_ton;
+  var scfMethane = scfBiogas * SF.ch4_fraction;        // CH4 portion (the energy-bearing gas)
   var m3Biogas = scfBiogas / SF.m3_to_scf;
-  var mmbtu = scfBiogas * SF.scf_to_mmbtu;
-  var kwh = lbsCarbon * SF.kwh_per_lb_carbon;
-  var ghg = totalGal * SF.density_lbs_per_gal / 2000 * SF.ghg_per_ton;
+  var mmbtu = scfMethane * SF.scf_to_mmbtu;            // MMBtu derives from CH4 content only
+  var kwh = mmbtu * SF.kwh_per_mmbtu * SF.genset_efficiency;
+
+  // Carbon content back-derived from measured biogas yield via methanogenesis stoichiometry:
+  // CH4 produced / 23 SCF/lb = lbs of biodegradable carbon converted
+  var lbsCarbon = scfMethane / SF.scf_ch4_per_lb_carbon;
+
+  var ghg = tons * SF.ghg_per_ton;                     // 0.62 tCO2e/ton (with caveat in report)
   var households = mmbtu / SF.household_mmbtu_monthly;
   var cars = ghg / SF.car_per_month;
   var trees = ghg / SF.tree_per_year;
@@ -1142,7 +1152,7 @@ function calcBulkLiquid(records){
     loads: records.length,
     gallons: totalGal,
     lbs: totalLbs,
-    tons_mass: totalLbs/2000,
+    tons_mass: tons,
     lbsCarbon: lbsCarbon,
     scfBiogas: scfBiogas,
     m3Biogas: m3Biogas,
@@ -2503,10 +2513,14 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   // Detail table
   document.getElementById('susSubTitle').textContent = (STATE.filters.customer==='ALL'?'VIRESCO Plant-Wide':STATE.filters.customer) + ' \u2014 ' + range.label;
   var rows = [];
-  rows.push(['GHG emissions avoided', fmt(s.ghg, 1) + ' Tons CO\u2082e', 'CARB ANDOC framework, GWP-28']);
+  rows.push([
+    tab==='bulk' ? 'GHG emissions diverted \u2020' : 'GHG emissions avoided',
+    fmt(s.ghg, 1) + ' Tons CO\u2082e',
+    tab==='bulk' ? 'Estimated, landfill-avoidance modeling' : 'CARB ANDOC framework, GWP-28'
+  ]);
   if(tab==='bulk'){
-    rows.push(['Carbon processed', fmt(s.lbsCarbon, 0) + ' lbs', '@ 10,000 ppm carbon content']);
-    rows.push(['Biogas yield', fmt(s.scfBiogas, 0) + ' SCF CH\u2084', '23 SCF/lb C  \u00B7  ' + fmt(s.m3Biogas, 0) + ' m\u00B3']);
+    rows.push(['Carbon processed', fmt(s.lbsCarbon, 0) + ' lbs', 'Back-derived from biogas yield (~14,000 ppm)']);
+    rows.push(['Biogas yield', fmt(s.scfBiogas, 0) + ' SCF', 'Plant-measured: 1,067 SCF/ton  \u00B7  ' + fmt(s.m3Biogas, 0) + ' m\u00B3']);
   } else {
     rows.push(['Biogas yield', fmt(s.m3Biogas, 0) + ' m\u00B3 CH\u2084', '100 m\u00B3/ton  \u00D7  73% digester eff.']);
     rows.push(['SCF equivalent', fmt(s.scfBiogas, 0) + ' SCF', '35.31 SCF per m\u00B3']);
@@ -2530,7 +2544,7 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   // Methodology
   var method = '';
   if(tab==='bulk'){
-    method = '<strong>Methodology.</strong> GHG calculated as gallons \u00D7 8.34 lbs/gal \u00F7 2,000 \u00D7 0.62 Tons CO\u2082e/ton (CARB ANDOC framework: 86.5% ANDOC, 75% LFG capture, GWP-28). Biogas and energy derived from carbon content (10,000 ppm) at 23 SCF CH\u2084/lb carbon and 1.34 kWh/lb carbon (40% genset efficiency baked in).';
+    method = '<strong>Methodology.</strong> Energy figures derived from VIRESCO plant-measured biogas yield of 1,067 SCF biogas per ton of bulk liquid input, assuming 60% methane composition and 40% biogas-to-electricity genset efficiency. Implied carbon content of approximately 14,000 ppm is back-derived from biogas yield using anaerobic digestion stoichiometry (23 SCF CH\u2084 per lb biodegradable carbon). GHG calculated as gallons \u00D7 8.34 lbs/gal \u00F7 2,000 \u00D7 0.62 Tons CO\u2082e/ton (GWP-28).<br><br><span style="color:var(--ink-300);font-size:11px;font-style:italic">Note on GHG figures: estimated emissions diverted are based on landfill-avoidance modeling. Actual avoided emissions depend on counterfactual disposal pathway and may be lower for land-applied or POTW-treated streams. Subject to revision based on facility-specific measurement.</span>';
   } else {
     method = '<strong>Methodology.</strong> GHG calculated as tons \u00D7 0.62 Tons CO\u2082e/ton (CARB ANDOC). Biogas: 100 m\u00B3/ton \u00D7 73% digester efficiency = 73 m\u00B3 CH\u2084/ton. Energy: m\u00B3 \u00D7 4 kWh/m\u00B3 (40% genset). NPK: 15 kg/ton (ReNutrient\u00AE).';
   }
@@ -3637,10 +3651,14 @@ function _generatePDF(records){
   detailRows.push([clean(tab==='bulk' ? 'Total gallons processed' : 'Total tons processed'),
     tab==='bulk' ? fmt(summary.gallons, 0) + ' gal' : fmt(summary.tons, 2) + ' tons',
     'Direct measurement']);
-  detailRows.push(['GHG emissions avoided', fmt(summary.ghg, 1) + ' Tons CO2e', 'CARB ANDOC, GWP-28']);
+  detailRows.push([
+    tab==='bulk' ? 'GHG emissions diverted \u2020' : 'GHG emissions avoided',
+    fmt(summary.ghg, 1) + ' Tons CO2e',
+    tab==='bulk' ? 'Estimated, landfill-avoidance modeling' : 'CARB ANDOC, GWP-28'
+  ]);
   if(tab==='bulk'){
-    detailRows.push(['Carbon processed', fmt(summary.lbsCarbon, 0) + ' lbs', '@ 10,000 ppm carbon content']);
-    detailRows.push(['Biogas yield', fmt(summary.scfBiogas, 0) + ' SCF CH4', '23 SCF/lb C  /  ' + fmt(summary.m3Biogas, 0) + ' m3']);
+    detailRows.push(['Carbon processed', fmt(summary.lbsCarbon, 0) + ' lbs', 'Back-derived from biogas yield (~14,000 ppm)']);
+    detailRows.push(['Biogas yield', fmt(summary.scfBiogas, 0) + ' SCF', 'Plant-measured: 1,067 SCF/ton  /  ' + fmt(summary.m3Biogas, 0) + ' m3']);
   } else {
     detailRows.push(['Biogas yield', fmt(summary.m3Biogas, 0) + ' m3 CH4', '100 m3/ton x 73% digester eff.']);
     detailRows.push(['SCF equivalent', fmt(summary.scfBiogas, 0) + ' SCF', '35.31 SCF per m3']);
@@ -3673,6 +3691,19 @@ function _generatePDF(records){
       }
     }
   });
+
+  // GHG caveat footnote (bulk only) — light italic at bottom of sustainability page
+  if(tab === 'bulk'){
+    var caveatY = doc.lastAutoTable.finalY + 14;
+    if(caveatY < pageH - 80){
+      doc.setFont('helvetica','italic');
+      doc.setFontSize(7.5);
+      setText(P.ink400);
+      var caveatText = '\u2020 GHG figures represent estimated emissions diverted under landfill-avoidance modeling. Actual avoided emissions depend on counterfactual disposal pathway and may be lower for land-applied or POTW-treated streams. Energy figures derived from VIRESCO plant-measured biogas yield (1,067 SCF/ton).';
+      var caveatLines = wrapText(caveatText, contentW, 7.5);
+      doc.text(caveatLines, margin, caveatY);
+    }
+  }
 
   drawPageFooter();
 
