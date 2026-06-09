@@ -125,6 +125,136 @@ button,select,input{font-family:inherit;font-size:13px}
 .filter-select:hover{background:var(--bg-card);border-color:var(--ink-200)}
 .filter-select:focus{outline:none;border-color:var(--green-700)}
 
+/* Multi-select customer picker */
+.cust-picker{position:relative;display:inline-block;min-width:200px}
+.cust-picker-btn{
+  padding:5px 10px;
+  font-size:12px;
+  color:var(--ink-700);
+  background:var(--bg-muted);
+  border:1px solid var(--line-300);
+  border-radius:4px;
+  cursor:pointer;
+  min-width:200px;
+  text-align:left;
+  font-family:inherit;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+}
+.cust-picker-btn:hover{background:var(--bg-card);border-color:var(--ink-200)}
+.cust-picker-btn:focus{outline:none;border-color:var(--green-700)}
+.cust-picker-btn::after{content:'\25BE';color:var(--ink-400);font-size:10px}
+.cust-picker.open .cust-picker-btn{border-color:var(--green-700);background:var(--bg-card)}
+.cust-picker-panel{
+  display:none;
+  position:absolute;
+  top:calc(100% + 4px);
+  left:0;
+  z-index:100;
+  min-width:280px;
+  max-width:360px;
+  background:var(--bg-card);
+  border:1px solid var(--line-300);
+  border-radius:6px;
+  box-shadow:0 6px 20px rgba(0,0,0,0.08);
+  padding:8px;
+}
+.cust-picker.open .cust-picker-panel{display:block}
+.cust-picker-search{
+  width:100%;
+  padding:6px 8px;
+  font-size:12px;
+  border:1px solid var(--line-300);
+  border-radius:4px;
+  margin-bottom:6px;
+  font-family:inherit;
+  color:var(--ink-700);
+  background:var(--bg-muted);
+}
+.cust-picker-search:focus{outline:none;border-color:var(--green-700);background:var(--bg-card)}
+.cust-picker-list{
+  max-height:260px;
+  overflow-y:auto;
+  border-top:1px solid var(--line-200);
+  margin-top:4px;
+  padding-top:4px;
+}
+.cust-picker-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 8px;
+  font-size:12px;
+  color:var(--ink-700);
+  cursor:pointer;
+  border-radius:4px;
+  user-select:none;
+}
+.cust-picker-item:hover{background:var(--bg-muted)}
+.cust-picker-item input[type=checkbox]{
+  margin:0;
+  cursor:pointer;
+  accent-color:var(--green-700);
+}
+.cust-picker-item.all-row{
+  font-weight:600;
+  border-bottom:1px solid var(--line-200);
+  margin-bottom:4px;
+  padding-bottom:8px;
+}
+.cust-picker-item .alias-count{
+  color:var(--ink-400);
+  font-size:11px;
+  margin-left:auto;
+}
+.cust-picker-label-input{
+  width:100%;
+  padding:6px 8px;
+  margin-top:8px;
+  font-size:12px;
+  border:1px solid var(--line-300);
+  border-radius:4px;
+  font-family:inherit;
+  color:var(--ink-700);
+  background:var(--bg-muted);
+  border-top:1px dashed var(--line-300);
+}
+.cust-picker-label-input:focus{outline:none;border-color:var(--green-700);background:var(--bg-card)}
+.cust-picker-label-hint{
+  font-size:10.5px;
+  color:var(--ink-400);
+  margin-top:6px;
+  padding:0 4px;
+  font-style:italic;
+}
+.cust-picker-actions{
+  display:flex;
+  gap:6px;
+  margin-top:6px;
+  padding-top:6px;
+  border-top:1px solid var(--line-200);
+}
+.cust-picker-actions button{
+  flex:1;
+  padding:5px 8px;
+  font-size:11px;
+  background:transparent;
+  border:1px solid var(--line-300);
+  border-radius:4px;
+  cursor:pointer;
+  color:var(--ink-500);
+  font-family:inherit;
+}
+.cust-picker-actions button:hover{background:var(--bg-muted);color:var(--ink-700)}
+.cust-picker-actions button.primary{
+  background:var(--green-700);
+  color:#fff;
+  border-color:var(--green-700);
+}
+.cust-picker-actions button.primary:hover{background:var(--green-800)}
+
 .period-seg{
   display:flex;
   border:1px solid var(--line-300);
@@ -829,7 +959,19 @@ button,select,input{font-family:inherit;font-size:13px}
 <div class="filter-bar" id="filterBar" style="display:none">
   <div class="filter-grp">
     <span class="filter-label" id="custLabel">Vendor</span>
-    <select class="filter-select" id="customerSel"></select>
+    <div class="cust-picker" id="custPicker">
+      <button type="button" class="cust-picker-btn" id="custPickerBtn">All vendors</button>
+      <div class="cust-picker-panel" id="custPickerPanel">
+        <input type="text" class="cust-picker-search" id="custPickerSearch" placeholder="Search...">
+        <div class="cust-picker-list" id="custPickerList"></div>
+        <input type="text" class="cust-picker-label-input" id="custPickerLabelInput" placeholder="Optional account label (e.g. Monster Brewing)" style="display:none">
+        <div class="cust-picker-label-hint" id="custPickerLabelHint" style="display:none">Used as the report title when multiple selected</div>
+        <div class="cust-picker-actions">
+          <button type="button" id="custPickerClear">Clear</button>
+          <button type="button" class="primary" id="custPickerApply">Apply</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="filter-grp">
@@ -1060,7 +1202,9 @@ var STATE = {
   activeTab: 'bulk',
   activeSection: 'overview',
   filters: {
-    customer: 'ALL',
+    customer: 'ALL',           // legacy single-select state, kept for migration safety; derived from customers
+    customers: [],             // multi-select: empty array = plant-wide; otherwise list of selected names
+    customerLabel: '',         // optional account-level label override (e.g. "Monster Brewing" for 5 locations)
     period: 'month',
     month: null,
     year: null,
@@ -1069,6 +1213,38 @@ var STATE = {
   },
   charts: {}
 };
+
+// =============================================================
+// CUSTOMER FILTER HELPERS (multi-select aware)
+// =============================================================
+function isPlantWide(){
+  // Plant-wide = no specific customers selected
+  return !STATE.filters.customers || STATE.filters.customers.length === 0;
+}
+
+function customerScope(){
+  // Returns the effective scope: {customers, label, isPlantWide, isMulti, isSingle}
+  var customers = STATE.filters.customers || [];
+  var isPW = customers.length === 0;
+  var isMulti = customers.length > 1;
+  var isSingle = customers.length === 1;
+  var label;
+  if(isPW){
+    label = 'VIRESCO Plant-Wide';
+  } else if(isSingle){
+    label = customers[0];
+  } else if(STATE.filters.customerLabel && STATE.filters.customerLabel.trim()){
+    label = STATE.filters.customerLabel.trim();
+  } else {
+    // Auto-derive: list if short, otherwise summarize
+    if(customers.length <= 2){
+      label = customers.join(' + ');
+    } else {
+      label = customers.length + ' selected';
+    }
+  }
+  return {customers:customers, label:label, isPlantWide:isPW, isMulti:isMulti, isSingle:isSingle};
+}
 
 // =============================================================
 // FORMATTERS
@@ -1811,10 +1987,6 @@ function setupFilters(){
       render();
     };
   });
-  document.getElementById('customerSel').onchange = function(){
-    STATE.filters.customer = this.value;
-    render();
-  };
   document.getElementById('monthSel').onchange = function(){
     STATE.filters.month = parseInt(this.value);
     render();
@@ -1832,6 +2004,164 @@ function setupFilters(){
     render();
   };
   document.getElementById('generateBtn').onclick = generatePDF;
+  setupCustomerPicker();
+}
+
+// =============================================================
+// CUSTOMER MULTI-SELECT PICKER
+// =============================================================
+var _pickerDraft = null;  // working selection state while picker is open; committed on Apply
+
+function setupCustomerPicker(){
+  var picker = document.getElementById('custPicker');
+  var btn = document.getElementById('custPickerBtn');
+  var panel = document.getElementById('custPickerPanel');
+  var search = document.getElementById('custPickerSearch');
+  var labelInput = document.getElementById('custPickerLabelInput');
+  var applyBtn = document.getElementById('custPickerApply');
+  var clearBtn = document.getElementById('custPickerClear');
+
+  btn.onclick = function(e){
+    e.stopPropagation();
+    var willOpen = !picker.classList.contains('open');
+    if(willOpen){
+      // Initialize draft from committed state
+      _pickerDraft = {
+        customers: (STATE.filters.customers||[]).slice(),
+        label: STATE.filters.customerLabel || ''
+      };
+      labelInput.value = _pickerDraft.label;
+      search.value = '';
+      renderPickerList('');
+      updatePickerLabelInputVisibility();
+      picker.classList.add('open');
+      setTimeout(function(){search.focus()}, 50);
+    } else {
+      picker.classList.remove('open');
+    }
+  };
+
+  // Click outside to close (without applying)
+  document.addEventListener('click', function(e){
+    if(!picker.contains(e.target) && picker.classList.contains('open')){
+      picker.classList.remove('open');
+    }
+  });
+
+  search.oninput = function(){
+    renderPickerList(this.value);
+  };
+
+  labelInput.oninput = function(){
+    _pickerDraft.label = this.value;
+  };
+
+  clearBtn.onclick = function(){
+    _pickerDraft.customers = [];
+    _pickerDraft.label = '';
+    labelInput.value = '';
+    renderPickerList(search.value);
+    updatePickerLabelInputVisibility();
+  };
+
+  applyBtn.onclick = function(){
+    STATE.filters.customers = _pickerDraft.customers.slice();
+    STATE.filters.customerLabel = _pickerDraft.label;
+    // Keep legacy single-customer state in sync for any unmigrated callsites
+    if(STATE.filters.customers.length === 0) STATE.filters.customer = 'ALL';
+    else if(STATE.filters.customers.length === 1) STATE.filters.customer = STATE.filters.customers[0];
+    else STATE.filters.customer = 'ALL';  // multi-select treated as plant-wide for any legacy callsite
+    picker.classList.remove('open');
+    updatePickerButtonLabel();
+    render();
+  };
+}
+
+function updatePickerLabelInputVisibility(){
+  var labelInput = document.getElementById('custPickerLabelInput');
+  var hint = document.getElementById('custPickerLabelHint');
+  var visible = _pickerDraft && _pickerDraft.customers.length >= 2;
+  labelInput.style.display = visible ? '' : 'none';
+  hint.style.display = visible ? '' : 'none';
+}
+
+function updatePickerButtonLabel(){
+  var btn = document.getElementById('custPickerBtn');
+  var scope = customerScope();
+  var nameField = STATE.activeTab==='bulk' ? 'vendor' : 'customer';
+  var allLabel = STATE.activeTab==='bulk' ? 'All vendors' : 'All customers';
+  if(scope.isPlantWide){
+    btn.textContent = allLabel;
+  } else if(scope.isSingle){
+    btn.textContent = scope.label;
+  } else {
+    btn.textContent = scope.label;
+  }
+}
+
+function renderPickerList(searchTerm){
+  var list = document.getElementById('custPickerList');
+  var data = currentData();
+  if(!data) { list.innerHTML = ''; return; }
+  var nameField = STATE.activeTab==='bulk' ? 'vendor' : 'customer';
+  var allNames = Array.from(new Set(data.map(function(r){return r[nameField]}))).sort();
+  var term = (searchTerm||'').toLowerCase().trim();
+  var filtered = term ? allNames.filter(function(n){return n.toLowerCase().indexOf(term) !== -1}) : allNames;
+
+  var allLabel = STATE.activeTab==='bulk' ? 'All vendors (plant-wide)' : 'All customers (plant-wide)';
+  var isPW = _pickerDraft.customers.length === 0;
+  var html = '';
+  html += '<label class="cust-picker-item all-row"><input type="checkbox" data-all="1"' + (isPW?' checked':'') + '><span>' + allLabel + '</span></label>';
+  filtered.forEach(function(c){
+    var checked = _pickerDraft.customers.indexOf(c) !== -1;
+    var aliasSuffix = '';
+    var role = nameField;
+    var rules = (STATE.merges && STATE.merges[role]) || [];
+    var rule = rules.find(function(rr){return rr.canonical === c});
+    if(rule){
+      var ac = rule.aliases.filter(function(a){return a !== c}).length;
+      if(ac > 0) aliasSuffix = '<span class="alias-count">+ ' + ac + ' alias' + (ac>1?'es':'') + '</span>';
+    }
+    if(STATE.activeTab==='bulk' && c==='DePak') aliasSuffix = '<span class="alias-count">internal</span>';
+    html += '<label class="cust-picker-item"><input type="checkbox" data-name="' + escapeAttr(c) + '"' + (checked?' checked':'') + '><span>' + escapeHtml(c) + '</span>' + aliasSuffix + '</label>';
+  });
+  if(filtered.length === 0){
+    html += '<div style="padding:12px 8px;color:var(--ink-300);font-size:11px;font-style:italic">No matches.</div>';
+  }
+  list.innerHTML = html;
+
+  // Wire checkbox handlers
+  list.querySelectorAll('input[type=checkbox]').forEach(function(cb){
+    cb.onchange = function(){
+      if(cb.dataset.all){
+        if(cb.checked){
+          _pickerDraft.customers = [];
+          _pickerDraft.label = '';
+          document.getElementById('custPickerLabelInput').value = '';
+        }
+        renderPickerList(document.getElementById('custPickerSearch').value);
+        updatePickerLabelInputVisibility();
+      } else {
+        var name = cb.dataset.name;
+        if(cb.checked){
+          if(_pickerDraft.customers.indexOf(name) === -1) _pickerDraft.customers.push(name);
+        } else {
+          _pickerDraft.customers = _pickerDraft.customers.filter(function(n){return n !== name});
+        }
+        // Sync the All row state
+        var allCb = list.querySelector('input[data-all]');
+        if(allCb) allCb.checked = _pickerDraft.customers.length === 0;
+        updatePickerLabelInputVisibility();
+      }
+    };
+  });
+}
+
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escapeAttr(s){
+  return String(s).replace(/"/g,'&quot;');
 }
 
 function updateFilterUI(){
@@ -1848,39 +2178,21 @@ function updateFilterUI(){
 function populateFilters(){
   var data = currentData();
   if(!data || !data.length) return;
-  var custSel = document.getElementById('customerSel');
   var nameField = STATE.activeTab==='bulk' ? 'vendor' : 'customer';
   document.getElementById('custLabel').textContent = STATE.activeTab==='bulk' ? 'Vendor' : 'Customer';
 
-  var customers = Array.from(new Set(data.map(function(r){return r[nameField]}))).sort();
-  custSel.innerHTML = '';
-
-  var optAll = document.createElement('option');
-  optAll.value = 'ALL';
-  optAll.textContent = 'VIRESCO Plant-Wide (' + (STATE.activeTab==='bulk'?'all vendors':'all customers') + ')';
-  custSel.appendChild(optAll);
-
-  customers.forEach(function(c){
-    var opt = document.createElement('option');
-    opt.value = c;
-    var label = c;
-    // Show merge indicator if this name is a canonical with absorbed aliases
-    var role = nameField;
-    var rules = (STATE.merges && STATE.merges[role]) || [];
-    var rule = rules.find(function(rr){return rr.canonical === c});
-    if(rule){
-      var aliasCount = rule.aliases.filter(function(a){return a !== c}).length;
-      if(aliasCount > 0) label += '  (+ ' + aliasCount + ' alias' + (aliasCount>1?'es':'') + ')';
-    }
-    if(STATE.activeTab==='bulk' && c==='DePak') label += '  (Internal)';
-    opt.textContent = label;
-    custSel.appendChild(opt);
-  });
-
-  if(!Array.from(custSel.options).map(function(o){return o.value}).includes(STATE.filters.customer)){
-    STATE.filters.customer = 'ALL';
+  // Sync picker: drop any selected customers that no longer exist in the data after re-uploads/merges
+  var existing = new Set(data.map(function(r){return r[nameField]}));
+  if(STATE.filters.customers && STATE.filters.customers.length){
+    STATE.filters.customers = STATE.filters.customers.filter(function(c){return existing.has(c)});
+    if(STATE.filters.customers.length === 0) STATE.filters.customerLabel = '';
   }
-  custSel.value = STATE.filters.customer;
+  // Keep legacy field in sync
+  if(STATE.filters.customers.length === 0) STATE.filters.customer = 'ALL';
+  else if(STATE.filters.customers.length === 1) STATE.filters.customer = STATE.filters.customers[0];
+  else STATE.filters.customer = 'ALL';
+
+  updatePickerButtonLabel();
 
   var monthSel = document.getElementById('monthSel');
   monthSel.innerHTML = '';
@@ -1946,6 +2258,8 @@ function setupTabs(){
       b.classList.add('active');
       STATE.activeTab = tab;
       STATE.filters.customer = 'ALL';
+      STATE.filters.customers = [];
+      STATE.filters.customerLabel = '';
       refreshTabState();
     };
   });
@@ -2109,26 +2423,27 @@ function getPriorRange(){
   }
 }
 
-function filterByRange(records, start, end, customer){
+function filterByRange(records, start, end, customersFilter){
+  // customersFilter can be: undefined/null/[] (plant-wide), or array of names
   var nameField = STATE.activeTab==='bulk' ? 'vendor' : 'customer';
+  var hasFilter = Array.isArray(customersFilter) && customersFilter.length > 0;
+  var filterSet = hasFilter ? new Set(customersFilter) : null;
   return records.filter(function(r){
     if(r.date < start || r.date > end) return false;
-    if(customer && customer !== 'ALL'){
-      if(r[nameField] !== customer) return false;
-    }
+    if(filterSet && !filterSet.has(r[nameField])) return false;
     return true;
   });
 }
 
 function filteredData(){
   var range = getDateRange();
-  return filterByRange(currentData()||[], range.start, range.end, STATE.filters.customer);
+  return filterByRange(currentData()||[], range.start, range.end, STATE.filters.customers);
 }
 
 function priorData(){
   var prior = getPriorRange();
   if(!prior) return [];
-  return filterByRange(currentData()||[], prior.start, prior.end, STATE.filters.customer);
+  return filterByRange(currentData()||[], prior.start, prior.end, STATE.filters.customers);
 }
 
 // =============================================================
@@ -2257,7 +2572,7 @@ function renderOverview(records, s, prior, ps, range, priorRange){
   else if(bucketMode === 'week') chartTitlePrefix = tab==='bulk' ? 'Weekly Volume' : 'Weekly Tons';
   else chartTitlePrefix = tab==='bulk' ? 'Daily Volume' : 'Daily Tons';
 
-  document.getElementById('dailyChartTitle').textContent = chartTitlePrefix + ' \u2014 ' + (STATE.filters.customer==='ALL'?'Plant-Wide':STATE.filters.customer);
+  document.getElementById('dailyChartTitle').textContent = chartTitlePrefix + ' \u2014 ' + customerScope().label;
   document.getElementById('dailyChartMeta').textContent = range.label;
   var subTextMap = {day: 'Gallons received per day', week: 'Gallons received per week', month: 'Gallons received per month'};
   var subTextMapT = {day: 'Tons processed per day', week: 'Tons processed per week', month: 'Tons processed per month'};
@@ -2405,8 +2720,10 @@ function renderOverview(records, s, prior, ps, range, priorRange){
   // Monthly trend (last 12 months from current data)
   var allRecords = currentData() || [];
   var byMo = {};
+  var _scopeSet = (STATE.filters.customers && STATE.filters.customers.length) ? new Set(STATE.filters.customers) : null;
+  var _nameField = tab==='bulk'?'vendor':'customer';
   allRecords.forEach(function(r){
-    if(STATE.filters.customer !== 'ALL' && r[tab==='bulk'?'vendor':'customer'] !== STATE.filters.customer) return;
+    if(_scopeSet && !_scopeSet.has(r[_nameField])) return;
     var k = r.date.getFullYear()+'-'+String(r.date.getMonth()+1).padStart(2,'0');
     byMo[k] = (byMo[k]||0) + (tab==='bulk' ? r.gallons : r.tons);
   });
@@ -2435,7 +2752,7 @@ function renderOverview(records, s, prior, ps, range, priorRange){
   document.getElementById('opsSummaryMeta').textContent = range.compact;
   var notes = [];
   notes.push(['Reporting period', range.label]);
-  notes.push([(tab==='bulk'?'Vendor':'Customer'), STATE.filters.customer==='ALL'?'VIRESCO Plant-Wide':STATE.filters.customer]);
+  notes.push([(tab==='bulk'?'Vendor':'Customer'), customerScope().label]);
   notes.push(['Total ' + (tab==='bulk'?'loads':'deliveries'), fmt(s.loads)]);
   if(tab==='bulk'){
     notes.push(['Average load size', fmt(s.gallons/(s.loads||1), 0) + ' gal']);
@@ -2512,7 +2829,7 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   document.getElementById('equivTable').innerHTML = equivHtml;
 
   // Detail table
-  document.getElementById('susSubTitle').textContent = (STATE.filters.customer==='ALL'?'VIRESCO Plant-Wide':STATE.filters.customer) + ' \u2014 ' + range.label;
+  document.getElementById('susSubTitle').textContent = customerScope().label + ' \u2014 ' + range.label;
   var rows = [];
   rows.push([
     tab==='bulk' ? 'GHG emissions diverted \u2020' : 'GHG emissions avoided',
@@ -2554,8 +2871,10 @@ function renderSustainability(records, s, prior, ps, range, priorRange){
   // Energy & GHG monthly chart
   var allRecs = currentData() || [];
   var monthlyData = {};
+  var _sScope = (STATE.filters.customers && STATE.filters.customers.length) ? new Set(STATE.filters.customers) : null;
+  var _sName = tab==='bulk'?'vendor':'customer';
   allRecs.forEach(function(r){
-    if(STATE.filters.customer !== 'ALL' && r[tab==='bulk'?'vendor':'customer'] !== STATE.filters.customer) return;
+    if(_sScope && !_sScope.has(r[_sName])) return;
     var k = r.date.getFullYear()+'-'+String(r.date.getMonth()+1).padStart(2,'0');
     if(!monthlyData[k]) monthlyData[k] = {ghg:0, mmbtu:0};
     var sub = calc([r], tab);
@@ -2954,13 +3273,16 @@ function _generatePDF(records){
   var priorSummary = calc(prior, tab);
   var range = getDateRange();
   var priorRange = getPriorRange();
-  var customer = STATE.filters.customer;
-  var customerName = customer === 'ALL' ? 'VIRESCO Plant-Wide' : customer;
+  var scope = customerScope();
+  var customer = scope.isPlantWide ? 'ALL' : (scope.isSingle ? scope.customers[0] : 'MULTI');
+  var customerName = scope.label;
   var streamName = tab === 'bulk' ? 'Bulk Liquid' : 'DePak Organics';
   var streamProgramName = tab === 'bulk' ? 'Bulk Liquid Sustainability Program' : 'DePak Organics Program';
-  var reportId = (tab==='bulk'?'BL':'DP') + '-' +
-    (customer==='ALL' ? 'PLANT' : customer.replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,8)) +
-    '-' + new Date().getTime().toString().substring(7);
+  var idSlug;
+  if(scope.isPlantWide) idSlug = 'PLANT';
+  else if(scope.isSingle) idSlug = scope.customers[0].replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,8);
+  else idSlug = (scope.label || 'MULTI').replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,8) || 'MULTI';
+  var reportId = (tab==='bulk'?'BL':'DP') + '-' + idSlug + '-' + new Date().getTime().toString().substring(7);
   var generatedDate = new Date().toLocaleDateString('en-US',{month:'long', day:'numeric', year:'numeric'});
 
   var priorMeaningful = prior && prior.length > 0;
@@ -3426,7 +3748,9 @@ function _generatePDF(records){
       return sorted.length ? sorted[0] : null;
     })();
     narrative = 'During the reporting period of ' + clean(range.label.replace(/Lifetime \(|\)$/g, '')) +
-      ', ' + (customer === 'ALL' ? 'VIRESCO\'s anaerobic digestion facility' : clean(customer)) +
+      ', ' + (scope.isPlantWide ? 'VIRESCO\'s anaerobic digestion facility' :
+              scope.isSingle ? clean(scope.customers[0]) :
+              clean(scope.label) + ' (' + scope.customers.length + ' locations)') +
       ' processed ' + fmt(summary.gallons, 0) + ' gallons of bulk liquid organics across ' +
       fmt(summary.loads) + ' loads, with material delivered on ' + uniqueDays +
       ' active days during the period. ';
@@ -3440,9 +3764,12 @@ function _generatePDF(records){
       ' Tons of CO2e versus the alternative fate of land application, ' +
       'and generated ' + fmt(summary.mmbtu, 0) + ' MMBtu of methane-rich biogas converted into ' +
       fmt(summary.kwh, 0) + ' kWh of grid-quality renewable electricity. ';
-    if(customer === 'ALL' && topV){
+    if(scope.isPlantWide && topV){
       narrative += 'The largest contributing vendor was ' + clean(topV[0]) +
         ' at ' + fmt(topV[1], 0) + ' gallons (' + fmt(100*topV[1]/summary.gallons, 1) + '% of total). ';
+    } else if(scope.isMulti && topV){
+      narrative += 'The largest contributing location was ' + clean(topV[0]) +
+        ' at ' + fmt(topV[1], 0) + ' gallons (' + fmt(100*topV[1]/summary.gallons, 1) + '% of selected total). ';
     }
     narrative += 'At the current intake rate, the program is projected to process approximately ' +
       fmtCompact(annualizedTotal) + ' gallons annually.';
@@ -3454,7 +3781,9 @@ function _generatePDF(records){
       return sorted.length ? sorted[0] : null;
     })();
     narrative = 'During the reporting period of ' + clean(range.label.replace(/Lifetime \(|\)$/g, '')) +
-      ', ' + (customer === 'ALL' ? 'VIRESCO\'s DePak operation' : clean(customer)) +
+      ', ' + (scope.isPlantWide ? 'VIRESCO\'s DePak operation' :
+              scope.isSingle ? clean(scope.customers[0]) :
+              clean(scope.label) + ' (' + scope.customers.length + ' locations)') +
       ' processed ' + fmt(summary.tons, 1) + ' tons (' + fmtCompact(summary.tons * 2000) +
       ' lbs) of packaged organic waste across ' + fmt(summary.loads) + ' deliveries on ' +
       uniqueDays + ' active days. ';
@@ -3468,9 +3797,12 @@ function _generatePDF(records){
       ' Tons of CO2e while producing ' + fmt(summary.mmbtu, 0) + ' MMBtu of biogas (' +
       fmt(summary.kwh, 0) + ' kWh equivalent) and ' + fmt(summary.npk, 0) +
       ' kg of NPK-rich digestate. ';
-    if(customer === 'ALL' && topC){
+    if(scope.isPlantWide && topC){
       narrative += 'The largest contributor was ' + clean(topC[0]) +
         ' at ' + fmt(topC[1], 1) + ' tons (' + fmt(100*topC[1]/summary.tons, 1) + '% of total). ';
+    } else if(scope.isMulti && topC){
+      narrative += 'The largest contributing location was ' + clean(topC[0]) +
+        ' at ' + fmt(topC[1], 1) + ' tons (' + fmt(100*topC[1]/summary.tons, 1) + '% of selected total). ';
     }
     narrative += 'At the current rate, the program is projected to process approximately ' +
       fmtCompact(annualizedTotal) + ' tons annually.';
@@ -3716,11 +4048,22 @@ function _generatePDF(records){
   drawPageHeader('Page 5 of 6');
   y = 60;
 
-  if(customer === 'ALL'){
-    y = sectionBar(tab==='bulk' ? 'Vendor Performance Rankings' : 'Customer Performance Rankings',
-      clean('By total ' + (tab==='bulk' ? 'volume' : 'tonnage')), y);
+  if(scope.isPlantWide || scope.isMulti){
+    // Section bar adapts: plant-wide shows "by total volume" for all vendors,
+    // multi-select shows "Locations within [account label]"
+    var rankingTitle = tab==='bulk' ? 'Vendor Performance Rankings' : 'Customer Performance Rankings';
+    var rankingSubtitle = scope.isPlantWide
+      ? 'By total ' + (tab==='bulk' ? 'volume' : 'tonnage')
+      : 'Locations within ' + scope.label;
+    y = sectionBar(rankingTitle, clean(rankingSubtitle), y);
 
     var allRecsRange = (currentData()||[]).filter(function(r){return r.date>=range.start && r.date<=range.end});
+    // For multi-select, restrict rankings to only the selected customers
+    if(scope.isMulti){
+      var _selSet = new Set(scope.customers);
+      var _selField = tab==='bulk' ? 'vendor' : 'customer';
+      allRecsRange = allRecsRange.filter(function(r){return _selSet.has(r[_selField])});
+    }
     var nameField = tab==='bulk' ? 'vendor' : 'customer';
     var valueField = tab==='bulk' ? 'gallons' : 'tons';
 
@@ -4029,7 +4372,8 @@ function _generatePDF(records){
   // ============================================================
   // SAVE
   // ============================================================
-  var fileName = (customer === 'ALL' ? 'VIRESCO' : customer) + ' - ' + clean(streamName) + ' Sustainability Report - ' + clean(range.shortLabel) + '.pdf';
+  var fileNamePrefix = scope.isPlantWide ? 'VIRESCO' : (scope.label || 'Selected');
+  var fileName = clean(fileNamePrefix) + ' - ' + clean(streamName) + ' Sustainability Report - ' + clean(range.shortLabel) + '.pdf';
   doc.save(fileName);
   showToast('PDF saved: ' + fileName);
 }
